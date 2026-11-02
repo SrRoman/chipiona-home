@@ -7,6 +7,8 @@ const StorageService = {
   isApiAvailable: false,
   STORAGE_KEY: 'chipiona_reservas_data',
   CASA_INFO_KEY: 'chipiona_casa_info_data',
+  LOGS_STORAGE_KEY: 'chipiona_audit_logs',
+  TRASH_STORAGE_KEY: 'chipiona_deleted_reservas',
 
   // Reparador de caracteres y tildes corruptas (mojibake)
   fixEncoding(obj) {
@@ -141,7 +143,9 @@ const StorageService = {
         if (!res.ok) {
           throw new Error(data.error || 'Error al guardar la reserva');
         }
-        return this.fixEncoding(data);
+        const fixed = this.fixEncoding(data);
+        this.addAuditLog('CREACION', `Nueva reserva: ${fixed.nombre}`, `${fixed.checkIn} al ${fixed.checkOut} (${fixed.habitaciones} hab.)`, fixed.id);
+        return fixed;
       } catch (e) {
         if (this.isApiAvailable) {
           throw e;
@@ -163,12 +167,22 @@ const StorageService = {
     };
 
     reservas.push(nueva);
+    reservas.sort((a, b) => new Date(a.checkIn) - new Date(b.checkIn));
     localStorage.setItem(this.STORAGE_KEY, JSON.stringify(reservas));
+    this.addAuditLog('CREACION', `Nueva reserva: ${nueva.nombre}`, `${nueva.checkIn} al ${nueva.checkOut} (${nueva.habitaciones} hab.)`, nueva.id);
     return nueva;
   },
 
-  // Eliminar / Cancelar reserva
+  // Eliminar / Cancelar reserva (La mueve a la papelera para poder recuperarla)
   async deleteReserva(id) {
+    const reservas = await this.getReservas();
+    const reservaABorrar = reservas.find((r) => r.id === id);
+
+    if (reservaABorrar) {
+      this.moveToTrash(reservaABorrar);
+      this.addAuditLog('ELIMINACION', `Reserva cancelada: ${reservaABorrar.nombre}`, `${reservaABorrar.checkIn} al ${reservaABorrar.checkOut} (${reservaABorrar.habitaciones} hab.)`, id);
+    }
+
     if (this.isApiAvailable) {
       try {
         const res = await fetch(`/api/reservas/${id}`, {
@@ -182,9 +196,195 @@ const StorageService = {
       }
     }
 
-    const reservas = await this.getReservas();
     const filtradas = reservas.filter((r) => r.id !== id);
     localStorage.setItem(this.STORAGE_KEY, JSON.stringify(filtradas));
+    return true;
+  },
+
+  // ========================================================
+  // AUDITORÍA: HISTORIAL DE LOGS DE ACTIVIDAD
+  // ========================================================
+  getLocalAuditLogs() {
+    try {
+      const local = localStorage.getItem(this.LOGS_STORAGE_KEY);
+      if (local) {
+        const parsed = JSON.parse(local);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return this.fixEncoding(parsed);
+        }
+      }
+    } catch (e) {
+      console.warn('Error leyendo logs locales:', e);
+    }
+    const demoLogs = this.getDefaultLogs();
+    try {
+      localStorage.setItem(this.LOGS_STORAGE_KEY, JSON.stringify(demoLogs));
+    } catch(e) {}
+    return demoLogs;
+  },
+
+  async getAuditLogs() {
+    if (this.isApiAvailable) {
+      try {
+        const res = await fetch('/api/logs');
+        if (res.ok) {
+          let data = await res.json();
+          data = this.fixEncoding(data);
+          localStorage.setItem(this.LOGS_STORAGE_KEY, JSON.stringify(data));
+          return data;
+        }
+      } catch (e) {
+        console.warn('Error consultando /api/logs:', e);
+      }
+    }
+    return this.getLocalAuditLogs();
+  },
+
+  addAuditLog(tipo, titulo, detalle, reservaId = null) {
+    const logs = this.getLocalAuditLogs();
+    const entry = {
+      id: 'log-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6),
+      tipo, // 'CREACION', 'ELIMINACION', 'RESTAURACION'
+      titulo: this.fixEncoding(titulo),
+      detalle: this.fixEncoding(detalle),
+      timestamp: new Date().toISOString(),
+      reservaId
+    };
+
+    logs.unshift(entry);
+    if (logs.length > 250) logs.pop(); // Mantener hasta 250 logs
+    try {
+      localStorage.setItem(this.LOGS_STORAGE_KEY, JSON.stringify(logs));
+    } catch(e) {}
+
+    if (this.isApiAvailable) {
+      fetch('/api/logs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json; charset=utf-8' },
+        body: JSON.stringify(entry)
+      }).catch(() => {});
+    }
+
+    return entry;
+  },
+
+  async clearAuditLogs() {
+    try {
+      localStorage.setItem(this.LOGS_STORAGE_KEY, JSON.stringify([]));
+    } catch(e) {}
+
+    if (this.isApiAvailable) {
+      try {
+        await fetch('/api/logs', { method: 'DELETE' });
+      } catch(e) {}
+    }
+    return true;
+  },
+
+  // ========================================================
+  // PAPELERA DE RECICLAJE Y RECUPERACIÓN DE RESERVAS
+  // ========================================================
+  getLocalTrash() {
+    try {
+      const local = localStorage.getItem(this.TRASH_STORAGE_KEY);
+      if (local) {
+        const parsed = JSON.parse(local);
+        if (Array.isArray(parsed)) {
+          return this.fixEncoding(parsed);
+        }
+      }
+    } catch (e) {
+      console.warn('Error leyendo papelera local:', e);
+    }
+    return [];
+  },
+
+  async getTrashReservas() {
+    if (this.isApiAvailable) {
+      try {
+        const res = await fetch('/api/trash');
+        if (res.ok) {
+          let data = await res.json();
+          data = this.fixEncoding(data);
+          localStorage.setItem(this.TRASH_STORAGE_KEY, JSON.stringify(data));
+          return data;
+        }
+      } catch (e) {
+        console.warn('Error consultando /api/trash:', e);
+      }
+    }
+    return this.getLocalTrash();
+  },
+
+  moveToTrash(reserva) {
+    const trash = this.getLocalTrash();
+    const item = {
+      ...reserva,
+      deletedAt: new Date().toISOString()
+    };
+    // Evitar duplicados en papelera
+    const filtrada = trash.filter(r => r.id !== item.id);
+    filtrada.unshift(item);
+    try {
+      localStorage.setItem(this.TRASH_STORAGE_KEY, JSON.stringify(filtrada));
+    } catch(e) {}
+    return item;
+  },
+
+  async restoreFromTrash(id) {
+    const trash = this.getLocalTrash();
+    const item = trash.find(r => r.id === id);
+    if (!item) {
+      throw new Error('La reserva ya no se encuentra en la papelera');
+    }
+
+    // 1. Validar que no haya conflictos de habitaciones en esas fechas
+    const reservas = await this.getReservas();
+    this.validarDisponibilidad(item, reservas);
+
+    // 2. Añadir de nuevo a las reservas activas
+    const restaurada = {
+      id: item.id,
+      nombre: item.nombre,
+      checkIn: item.checkIn,
+      checkOut: item.checkOut,
+      habitaciones: parseInt(item.habitaciones, 10),
+      comentarios: item.comentarios || '',
+      createdAt: item.createdAt || new Date().toISOString(),
+      restoredAt: new Date().toISOString()
+    };
+
+    reservas.push(restaurada);
+    reservas.sort((a, b) => new Date(a.checkIn) - new Date(b.checkIn));
+    localStorage.setItem(this.STORAGE_KEY, JSON.stringify(reservas));
+
+    // 3. Quitar de la papelera
+    const nuevoTrash = trash.filter(r => r.id !== id);
+    localStorage.setItem(this.TRASH_STORAGE_KEY, JSON.stringify(nuevoTrash));
+
+    // 4. Registrar en logs
+    this.addAuditLog('RESTAURACION', `Reserva restaurada: ${restaurada.nombre}`, `${restaurada.checkIn} al ${restaurada.checkOut} (${restaurada.habitaciones} hab.)`, restaurada.id);
+
+    // 5. Notificar a API si existe
+    if (this.isApiAvailable) {
+      try {
+        await fetch(`/api/trash/restore/${id}`, { method: 'POST' });
+      } catch(e) {}
+    }
+
+    return restaurada;
+  },
+
+  async deleteFromTrashPermanently(id) {
+    const trash = this.getLocalTrash();
+    const nuevoTrash = trash.filter(r => r.id !== id);
+    localStorage.setItem(this.TRASH_STORAGE_KEY, JSON.stringify(nuevoTrash));
+
+    if (this.isApiAvailable) {
+      try {
+        await fetch(`/api/trash/${id}`, { method: 'DELETE' });
+      } catch(e) {}
+    }
     return true;
   },
 
@@ -273,6 +473,34 @@ const StorageService = {
 
       cur.setDate(cur.getDate() + 1);
     }
+  },
+
+  getDefaultLogs() {
+    const today = new Date();
+    const format = (d) => d.toISOString().split('T')[0];
+    const d1 = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 4);
+    const d2 = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 8);
+    const d3 = new Date(today.getFullYear(), today.getMonth() + 1, 10);
+    const d4 = new Date(today.getFullYear(), today.getMonth() + 1, 15);
+
+    return [
+      {
+        id: 'log-seed-1',
+        tipo: 'CREACION',
+        titulo: 'Nueva reserva: Tía Carmen',
+        detalle: `${format(d1)} al ${format(d2)} (2 habitaciones)`,
+        timestamp: new Date(Date.now() - 3600000 * 48).toISOString(),
+        reservaId: 'res-demo-1'
+      },
+      {
+        id: 'log-seed-2',
+        tipo: 'CREACION',
+        titulo: 'Nueva reserva: Primo Alejandro',
+        detalle: `${format(d3)} al ${format(d4)} (1 habitación)`,
+        timestamp: new Date(Date.now() - 3600000 * 18).toISOString(),
+        reservaId: 'res-demo-2'
+      }
+    ];
   },
 
   getDefaultCasaInfo() {

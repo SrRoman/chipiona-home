@@ -8,6 +8,8 @@ const app = express();
 const DATA_DIR = process.env.VERCEL ? path.join('/tmp', 'data') : path.join(__dirname, 'data');
 const DATA_FILE = path.join(DATA_DIR, 'reservas.json');
 const INFO_FILE = path.join(DATA_DIR, 'casa_info.json');
+const LOGS_FILE = path.join(DATA_DIR, 'audit_logs.json');
+const TRASH_FILE = path.join(DATA_DIR, 'trash_reservas.json');
 
 // Middleware
 app.use(cors());
@@ -44,11 +46,19 @@ if (!fs.existsSync(DATA_DIR)) {
 if (process.env.VERCEL) {
   const seedData = path.join(__dirname, 'data', 'reservas.json');
   const seedInfo = path.join(__dirname, 'data', 'casa_info.json');
+  const seedLogs = path.join(__dirname, 'data', 'audit_logs.json');
+  const seedTrash = path.join(__dirname, 'data', 'trash_reservas.json');
   if (!fs.existsSync(DATA_FILE) && fs.existsSync(seedData)) {
     fs.copyFileSync(seedData, DATA_FILE);
   }
   if (!fs.existsSync(INFO_FILE) && fs.existsSync(seedInfo)) {
     fs.copyFileSync(seedInfo, INFO_FILE);
+  }
+  if (!fs.existsSync(LOGS_FILE) && fs.existsSync(seedLogs)) {
+    fs.copyFileSync(seedLogs, LOGS_FILE);
+  }
+  if (!fs.existsSync(TRASH_FILE) && fs.existsSync(seedTrash)) {
+    fs.copyFileSync(seedTrash, TRASH_FILE);
   }
 }
 
@@ -143,6 +153,87 @@ function writeCasaInfo(info) {
   }
 }
 
+function readLogs() {
+  try {
+    if (!fs.existsSync(LOGS_FILE)) {
+      const initialLogs = [
+        {
+          id: 'log-seed-1',
+          tipo: 'CREACION',
+          titulo: 'Nueva reserva: Tía Carmen',
+          detalle: '2 habitaciones',
+          timestamp: new Date(Date.now() - 3600000 * 48).toISOString(),
+          reservaId: 'res-demo-1'
+        },
+        {
+          id: 'log-seed-2',
+          tipo: 'CREACION',
+          titulo: 'Nueva reserva: Primo Alejandro',
+          detalle: '1 habitación',
+          timestamp: new Date(Date.now() - 3600000 * 18).toISOString(),
+          reservaId: 'res-demo-2'
+        }
+      ];
+      fs.writeFileSync(LOGS_FILE, JSON.stringify(initialLogs, null, 2), 'utf-8');
+      return initialLogs;
+    }
+    const data = fs.readFileSync(LOGS_FILE, 'utf-8');
+    return JSON.parse(data || '[]');
+  } catch (error) {
+    console.error('Error al leer logs:', error);
+    return [];
+  }
+}
+
+function writeLogs(logs) {
+  try {
+    fs.writeFileSync(LOGS_FILE, JSON.stringify(logs, null, 2), 'utf-8');
+    return true;
+  } catch (error) {
+    console.error('Error al guardar logs:', error);
+    return false;
+  }
+}
+
+function addLogEntry(tipo, titulo, detalle, reservaId = null) {
+  const logs = readLogs();
+  const entry = {
+    id: 'log-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6),
+    tipo,
+    titulo,
+    detalle,
+    timestamp: new Date().toISOString(),
+    reservaId
+  };
+  logs.unshift(entry);
+  if (logs.length > 250) logs.pop();
+  writeLogs(logs);
+  return entry;
+}
+
+function readTrash() {
+  try {
+    if (!fs.existsSync(TRASH_FILE)) {
+      return [];
+    }
+    const data = fs.readFileSync(TRASH_FILE, 'utf-8');
+    return JSON.parse(data || '[]');
+  } catch (error) {
+    console.error('Error al leer papelera:', error);
+    return [];
+  }
+}
+
+function writeTrash(trash) {
+  try {
+    fs.writeFileSync(TRASH_FILE, JSON.stringify(trash, null, 2), 'utf-8');
+    return true;
+  } catch (error) {
+    console.error('Error al guardar papelera:', error);
+    return false;
+  }
+}
+
 // Rutas de API Reservas
 app.get('/api/reservas', (req, res) => {
   const reservas = readReservas();
@@ -213,7 +304,10 @@ app.post('/api/reservas', (req, res) => {
   };
 
   reservas.push(nuevaReserva);
+  reservas.sort((a, b) => new Date(a.checkIn) - new Date(b.checkIn));
   writeReservas(reservas);
+
+  addLogEntry('CREACION', `Nueva reserva: ${nuevaReserva.nombre}`, `${nuevaReserva.checkIn} al ${nuevaReserva.checkOut} (${nuevaReserva.habitaciones} hab.)`, nuevaReserva.id);
 
   res.status(201).json(nuevaReserva);
 });
@@ -230,7 +324,109 @@ app.delete('/api/reservas/:id', (req, res) => {
   const eliminada = reservas.splice(index, 1)[0];
   writeReservas(reservas);
 
-  res.json({ success: true, eliminada });
+  // Mover a la papelera
+  const trash = readTrash();
+  const itemTrash = { ...eliminada, deletedAt: new Date().toISOString() };
+  trash.unshift(itemTrash);
+  writeTrash(trash);
+
+  // Registrar en logs de auditoría
+  addLogEntry('ELIMINACION', `Reserva cancelada: ${eliminada.nombre}`, `${eliminada.checkIn} al ${eliminada.checkOut} (${eliminada.habitaciones} hab.)`, id);
+
+  res.json({ success: true, eliminada, trash: itemTrash });
+});
+
+// Rutas de API Logs de Auditoría
+app.get('/api/logs', (req, res) => {
+  const logs = readLogs();
+  res.json(logs);
+});
+
+app.post('/api/logs', (req, res) => {
+  const { tipo, titulo, detalle, reservaId } = req.body;
+  if (!tipo || !titulo) {
+    return res.status(400).json({ error: 'Faltan campos para registrar el log' });
+  }
+  const entry = addLogEntry(tipo, titulo, detalle || '', reservaId || null);
+  res.status(201).json(entry);
+});
+
+app.delete('/api/logs', (req, res) => {
+  writeLogs([]);
+  res.json({ success: true });
+});
+
+// Rutas de API Papelera y Restauración
+app.get('/api/trash', (req, res) => {
+  const trash = readTrash();
+  res.json(trash);
+});
+
+app.post('/api/trash/restore/:id', (req, res) => {
+  const { id } = req.params;
+  const trash = readTrash();
+  const itemIndex = trash.findIndex(r => r.id === id);
+
+  if (itemIndex === -1) {
+    return res.status(404).json({ error: 'Reserva no encontrada en la papelera' });
+  }
+
+  const item = trash[itemIndex];
+  const reservas = readReservas();
+
+  // Validar disponibilidad
+  const entrada = new Date(item.checkIn);
+  const salida = new Date(item.checkOut);
+  let cur = new Date(entrada);
+  let conflicto = null;
+
+  while (cur < salida) {
+    const curStr = cur.toISOString().split('T')[0];
+    let ocupadas = 0;
+    for (const r of reservas) {
+      const rIn = new Date(r.checkIn);
+      const rOut = new Date(r.checkOut);
+      if (cur >= rIn && cur < rOut) {
+        ocupadas += r.habitaciones;
+      }
+    }
+    if (ocupadas + item.habitaciones > 3) {
+      conflicto = { fecha: curStr, ocupadas, disponibles: Math.max(0, 3 - ocupadas) };
+      break;
+    }
+    cur.setDate(cur.getDate() + 1);
+  }
+
+  if (conflicto) {
+    return res.status(409).json({
+      error: `Conflicto para el día ${conflicto.fecha}. Solo quedan ${conflicto.disponibles} habitación(es) libre(s).`
+    });
+  }
+
+  // Quitar de papelera y agregar a reservas
+  trash.splice(itemIndex, 1);
+  writeTrash(trash);
+
+  const restaurada = {
+    ...item,
+    restoredAt: new Date().toISOString()
+  };
+  delete restaurada.deletedAt;
+  reservas.push(restaurada);
+  reservas.sort((a, b) => new Date(a.checkIn) - new Date(b.checkIn));
+  writeReservas(reservas);
+
+  addLogEntry('RESTAURACION', `Reserva restaurada: ${restaurada.nombre}`, `${restaurada.checkIn} al ${restaurada.checkOut} (${restaurada.habitaciones} hab.)`, restaurada.id);
+
+  res.json({ success: true, reserva: restaurada });
+});
+
+app.delete('/api/trash/:id', (req, res) => {
+  const { id } = req.params;
+  let trash = readTrash();
+  trash = trash.filter(r => r.id !== id);
+  writeTrash(trash);
+  res.json({ success: true });
 });
 
 // Rutas de API Información de La Casa (Normas, Habitaciones, Consejos)

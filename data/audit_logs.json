@@ -1,0 +1,18 @@
+[
+  {
+    "id": "log-seed-1",
+    "tipo": "CREACION",
+    "titulo": "Nueva reserva: Tía Carmen",
+    "detalle": "2 habitaciones",
+    "timestamp": "2026-10-31T20:41:45.757Z",
+    "reservaId": "res-demo-1"
+  },
+  {
+    "id": "log-seed-2",
+    "tipo": "CREACION",
+    "titulo": "Nueva reserva: Primo Alejandro",
+    "detalle": "1 habitación",
+    "timestamp": "2026-11-02T02:41:45.757Z",
+    "reservaId": "res-demo-2"
+  }
+]

@@ -241,3 +241,35 @@ span.flatpickr-weekday {
   display: none !important;
 }
 
+/* Soporte para Modo Administrador (PIN 7171) */
+.admin-only {
+  display: none !important;
+}
+
+html.is-admin .admin-only {
+  display: flex !important;
+}
+
+html.is-admin .admin-only-block {
+  display: block !important;
+}
+
+/* Estilos de badges de logs de auditoría */
+.badge-log-creacion {
+  background-color: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+}
+
+.badge-log-eliminacion {
+  background-color: rgba(244, 63, 94, 0.15);
+  color: #fb7185;
+  border: 1px solid rgba(244, 63, 94, 0.35);
+}
+
+.badge-log-restauracion {
+  background-color: rgba(14, 165, 233, 0.15);
+  color: #38bdf8;
+  border: 1px solid rgba(14, 165, 233, 0.35);
+}
+

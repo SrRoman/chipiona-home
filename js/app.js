@@ -11,9 +11,13 @@ const AppState = {
   reservas: [],
   selectedReserva: null,
   casaInfo: null,
-  activeTab: 'inicio', // 'inicio', 'calendario', 'lista', 'info'
+  activeTab: 'inicio', // 'inicio', 'calendario', 'lista', 'info', 'admin'
   flatpickrInstance: null,
   selectedHabitaciones: 1,
+  isAdmin: false,
+  auditLogs: [],
+  trashReservas: [],
+  currentLogFilter: 'todos', // 'todos', 'creacion', 'eliminacion', 'restauracion'
 };
 
 // Paleta de colores vibrantes para distinguir reservas familiares en tema oscuro
@@ -40,8 +44,15 @@ function getColorForName(name) {
 function initApp() {
   console.log('🏖️ Iniciando Casa Chipiona Web...');
 
-  // 1. PIN de seguridad
+  // 1. PIN de seguridad y detección de Modo Administrador
   try {
+    const savedPin = localStorage.getItem('chipiona_auth_pin_verified');
+    AppState.isAdmin = localStorage.getItem('chipiona_is_admin') === 'true' || savedPin === '7171';
+    if (AppState.isAdmin) {
+      document.documentElement.classList.add('is-admin');
+    } else {
+      document.documentElement.classList.remove('is-admin');
+    }
     setupPINAuth();
     checkAuthPIN();
   } catch(e) {}
@@ -52,6 +63,8 @@ function initApp() {
       AppState.reservas = StorageService.getLocalReservas();
       AppState.reservas.sort((a, b) => new Date(a.checkIn) - new Date(b.checkIn));
       AppState.casaInfo = StorageService.getLocalCasaInfo();
+      AppState.auditLogs = StorageService.getLocalAuditLogs();
+      AppState.trashReservas = StorageService.getLocalTrash();
     }
   } catch (err) {
     console.warn('Carga síncrona local:', err);
@@ -77,6 +90,7 @@ function initApp() {
     renderCalendar();
     renderLista();
     renderCasaInfo();
+    renderAdminPanel();
     updateNavigationTabs('inicio');
   } catch (err) {
     console.error('Error renderizando vistas iniciales:', err);
@@ -91,15 +105,30 @@ async function syncBackendInBackground() {
     if (typeof StorageService === 'undefined') return;
     await StorageService.init();
     if (StorageService.isApiAvailable) {
-      await Promise.all([loadReservas(), loadCasaInfo()]);
+      await Promise.all([loadReservas(), loadCasaInfo(), loadAuditLogs(), loadTrash()]);
       renderInicio();
       renderCalendar();
       renderLista();
       renderCasaInfo();
+      if (AppState.activeTab === 'admin') {
+        renderAdminPanel();
+      }
     }
   } catch (e) {
     console.log('Sincronización en segundo plano lista');
   }
+}
+
+async function loadAuditLogs() {
+  try {
+    AppState.auditLogs = await StorageService.getAuditLogs();
+  } catch(e) {}
+}
+
+async function loadTrash() {
+  try {
+    AppState.trashReservas = await StorageService.getTrashReservas();
+  } catch(e) {}
 }
 
 // Ejecutar inmediatamente si el DOM ya está listo, o escuchar DOMContentLoaded
@@ -400,6 +429,8 @@ function switchTab(tabName) {
     renderLista();
   } else if (tabName === 'info') {
     renderCasaInfo();
+  } else if (tabName === 'admin') {
+    renderAdminPanel();
   }
 
   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -438,25 +469,43 @@ function updateNavigationTabs(tabName) {
     const label = btn.querySelector('.tab-label');
 
     if (target === tabName) {
-      btn.classList.add('text-sky-400');
-      btn.classList.remove('text-slate-400');
-      if (icon) icon.classList.add('scale-110');
-      if (label) label.classList.add('font-bold', 'text-sky-300');
+      if (target === 'admin') {
+        btn.classList.add('text-amber-400');
+        btn.classList.remove('text-slate-400');
+        if (icon) icon.classList.add('scale-110');
+        if (label) label.classList.add('font-bold', 'text-amber-300');
+      } else {
+        btn.classList.add('text-sky-400');
+        btn.classList.remove('text-slate-400');
+        if (icon) icon.classList.add('scale-110');
+        if (label) label.classList.add('font-bold', 'text-sky-300');
+      }
     } else {
-      btn.classList.remove('text-sky-400');
+      btn.classList.remove('text-sky-400', 'text-amber-400');
       btn.classList.add('text-slate-400');
       if (icon) icon.classList.remove('scale-110');
-      if (label) label.classList.remove('font-bold', 'text-sky-300');
+      if (label) label.classList.remove('font-bold', 'text-sky-300', 'text-amber-300');
     }
   });
 
   // Escritorio (top nav)
   document.querySelectorAll('#desktop-nav [data-tab-target]').forEach((btn) => {
     const target = btn.getAttribute('data-tab-target');
+    const isAdminBtn = btn.classList.contains('admin-only');
+    const prefix = isAdminBtn ? 'admin-only ' : '';
+
     if (target === tabName) {
-      btn.className = 'px-3.5 py-1.5 rounded-xl text-xs font-bold bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-xs transition';
+      if (target === 'admin') {
+        btn.className = `${prefix}px-3.5 py-1.5 rounded-xl text-xs font-bold bg-amber-500/25 text-amber-300 border border-amber-500/50 shadow-xs transition whitespace-nowrap`;
+      } else {
+        btn.className = `${prefix}px-3.5 py-1.5 rounded-xl text-xs font-bold bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-xs transition whitespace-nowrap`;
+      }
     } else {
-      btn.className = 'px-3.5 py-1.5 rounded-xl text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800/60 border border-transparent transition';
+      if (target === 'admin') {
+        btn.className = `${prefix}px-3.5 py-1.5 rounded-xl text-xs font-semibold text-amber-400/90 hover:text-white hover:bg-amber-950/40 border border-amber-500/30 transition whitespace-nowrap`;
+      } else {
+        btn.className = `${prefix}px-3.5 py-1.5 rounded-xl text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800/60 border border-transparent transition whitespace-nowrap`;
+      }
     }
   });
 }
@@ -950,9 +999,11 @@ async function handleNuevaReserva(e) {
     });
 
     await loadReservas();
+    AppState.auditLogs = StorageService.getLocalAuditLogs();
     renderInicio();
     renderCalendar();
     renderLista();
+    renderAdminPanel();
 
     closeAllModals();
     showToast(`¡Reserva confirmada para ${nombre}! 🏖️`, 'success');
@@ -1043,12 +1094,16 @@ async function handleCancelarReserva() {
     await StorageService.deleteReserva(id);
 
     await loadReservas();
+    AppState.trashReservas = StorageService.getLocalTrash();
+    AppState.auditLogs = StorageService.getLocalAuditLogs();
+
     renderInicio();
     renderCalendar();
     renderLista();
+    renderAdminPanel();
 
     closeAllModals();
-    showToast(`Reserva de ${nombre} cancelada correctamente`, 'info');
+    showToast(`Reserva de ${nombre} cancelada y movida a papelera`, 'info');
   } catch (error) {
     console.error('Error al cancelar reserva:', error);
     showToast('Error al cancelar la reserva', 'error');
@@ -1109,6 +1164,261 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+function formatDateTime(isoStr) {
+  if (!isoStr) return '';
+  const d = new Date(isoStr);
+  if (isNaN(d.getTime())) return isoStr;
+  const meses = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  const dia = d.getDate();
+  const mes = meses[d.getMonth()];
+  const anio = d.getFullYear();
+  const horas = String(d.getHours()).padStart(2, '0');
+  const minutos = String(d.getMinutes()).padStart(2, '0');
+  return `${dia} ${mes} ${anio}, ${horas}:${minutos}`;
+}
+
+// ==========================================
+// MODO ADMINISTRADOR: PANEL, PAPELERA Y LOGS
+// ==========================================
+
+function renderAdminPanel() {
+  const kpiActivas = document.getElementById('admin-kpi-activas');
+  const kpiTrash = document.getElementById('admin-kpi-papelera');
+  const kpiLogs = document.getElementById('admin-kpi-logs');
+
+  if (kpiActivas) kpiActivas.textContent = AppState.reservas.length;
+  if (kpiTrash) kpiTrash.textContent = (AppState.trashReservas || []).length;
+  if (kpiLogs) kpiLogs.textContent = (AppState.auditLogs || []).length;
+
+  renderAdminTrash();
+  renderAdminLogs();
+}
+
+function renderAdminTrash() {
+  const container = document.getElementById('admin-trash-container');
+  if (!container) return;
+
+  const trash = AppState.trashReservas || [];
+  if (trash.length === 0) {
+    container.innerHTML = `
+      <div class="p-8 text-center bg-slate-900/60 rounded-3xl border border-slate-800/80 space-y-3">
+        <div class="w-12 h-12 rounded-2xl bg-slate-800 flex items-center justify-center text-2xl mx-auto text-slate-400">
+          🗑️
+        </div>
+        <div>
+          <h4 class="text-sm font-bold text-white">La papelera está vacía</h4>
+          <p class="text-xs text-slate-400 max-w-sm mx-auto mt-1">
+            Cuando se elimine o cancele una reserva, se guardará aquí. Podrás recuperarla en cualquier momento con un solo clic.
+          </p>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = trash.map((r) => {
+    const color = getColorForName(r.nombre);
+    const noches = calculateNights(r.checkIn, r.checkOut);
+    const fechaEliminada = formatDateTime(r.deletedAt || r.createdAt);
+
+    return `
+      <div class="p-4 sm:p-5 rounded-2xl bg-slate-900/90 border border-slate-800 hover:border-slate-700/80 shadow-lg transition space-y-3">
+        <div class="flex items-start justify-between gap-3">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-2xl ${color.badge} flex items-center justify-center text-sm font-black shadow-md">
+              ${getInitials(r.nombre)}
+            </div>
+            <div>
+              <h4 class="text-sm sm:text-base font-extrabold text-white flex items-center gap-2">
+                ${escapeHtml(r.nombre)}
+                <span class="text-[10px] px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 font-bold">
+                  Eliminada
+                </span>
+              </h4>
+              <p class="text-xs text-slate-400 mt-0.5">
+                📅 ${formatDateShort(r.checkIn)} → ${formatDateShort(r.checkOut)} · <span class="text-sky-300 font-medium">${noches} ${noches === 1 ? 'noche' : 'noches'}</span>
+              </p>
+            </div>
+          </div>
+          <span class="text-xs font-semibold px-2.5 py-1 rounded-xl bg-slate-800/80 text-slate-300 border border-slate-700/60 whitespace-nowrap">
+            🛏️ ${r.habitaciones} ${r.habitaciones === 1 ? 'habitación' : 'habitaciones'}
+          </span>
+        </div>
+
+        ${r.comentarios ? `
+          <div class="text-xs text-slate-300/90 bg-slate-950/60 p-2.5 rounded-xl border border-slate-800/60 italic">
+            💬 "${escapeHtml(r.comentarios)}"
+          </div>
+        ` : ''}
+
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-2 border-t border-slate-800/80 text-xs">
+          <span class="text-[11px] text-slate-500 flex items-center gap-1">
+            🕒 Eliminada: ${fechaEliminada}
+          </span>
+          <div class="flex items-center gap-2">
+            <button onclick="eliminarReservaPermanente('${r.id}')" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-rose-950/40 text-slate-400 hover:text-rose-300 border border-slate-700/80 text-xs font-semibold transition flex items-center gap-1">
+              <span>🗑️</span>
+              <span>Borrar definitiva</span>
+            </button>
+            <button onclick="restaurarReserva('${r.id}')" class="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95 text-white text-xs font-extrabold shadow-md transition flex items-center gap-1.5">
+              <span>♻️</span>
+              <span>Recuperar Reserva</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderAdminLogs() {
+  const container = document.getElementById('admin-logs-container');
+  if (!container) return;
+
+  const logs = AppState.auditLogs || [];
+  const filtro = AppState.currentLogFilter || 'todos';
+
+  const filtrados = logs.filter(l => {
+    if (filtro === 'todos') return true;
+    if (filtro === 'creacion') return l.tipo === 'CREACION';
+    if (filtro === 'eliminacion') return l.tipo === 'ELIMINACION';
+    if (filtro === 'restauracion') return l.tipo === 'RESTAURACION';
+    return true;
+  });
+
+  // Actualizar botones de filtro
+  document.querySelectorAll('[data-log-filter]').forEach(btn => {
+    const target = btn.getAttribute('data-log-filter');
+    if (target === filtro) {
+      btn.className = 'px-3 py-1.5 rounded-xl text-xs font-extrabold bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-xs transition';
+    } else {
+      btn.className = 'px-3 py-1.5 rounded-xl text-xs font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent transition';
+    }
+  });
+
+  if (filtrados.length === 0) {
+    container.innerHTML = `
+      <div class="p-6 text-center text-xs text-slate-500 bg-slate-900/40 rounded-2xl border border-slate-800">
+        No hay registros que coincidan con este filtro.
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = filtrados.map(l => {
+    const isCreacion = l.tipo === 'CREACION';
+    const isEliminacion = l.tipo === 'ELIMINACION';
+    const isRestauracion = l.tipo === 'RESTAURACION';
+
+    const icon = isCreacion ? '➕' : isEliminacion ? '🗑️' : '♻️';
+    const badgeClass = isCreacion
+      ? 'badge-log-creacion'
+      : isEliminacion
+      ? 'badge-log-eliminacion'
+      : 'badge-log-restauracion';
+    const tagText = isCreacion ? 'Nueva Reserva' : isEliminacion ? 'Cancelada / Eliminada' : 'Restaurada';
+
+    return `
+      <div class="p-3.5 sm:p-4 rounded-2xl bg-slate-900/80 border border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs transition">
+        <div class="flex items-start sm:items-center gap-3">
+          <div class="w-8 h-8 rounded-xl flex items-center justify-center text-sm font-bold shrink-0 ${badgeClass}">
+            ${icon}
+          </div>
+          <div>
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="font-bold text-white">${escapeHtml(l.titulo)}</span>
+              <span class="text-[10px] px-2 py-0.5 rounded-full font-semibold ${badgeClass}">
+                ${tagText}
+              </span>
+            </div>
+            ${l.detalle ? `<p class="text-slate-400 text-[11px] mt-0.5">${escapeHtml(l.detalle)}</p>` : ''}
+          </div>
+        </div>
+        <div class="text-[11px] text-slate-500 whitespace-nowrap self-end sm:self-auto">
+          🕒 ${formatDateTime(l.timestamp)}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// Acciones globales de administración
+async function restaurarReserva(id) {
+  try {
+    const restaurada = await StorageService.restoreFromTrash(id);
+    await loadReservas();
+    AppState.trashReservas = StorageService.getLocalTrash();
+    AppState.auditLogs = StorageService.getLocalAuditLogs();
+
+    renderInicio();
+    renderCalendar();
+    renderLista();
+    renderAdminPanel();
+
+    showToast(`✅ Reserva de ${restaurada.nombre} recuperada con éxito`, 'success');
+  } catch (error) {
+    console.error('Error restaurando reserva:', error);
+    alert(`⚠️ No se puede recuperar esta reserva:\n\n${error.message}`);
+  }
+}
+
+async function eliminarReservaPermanente(id) {
+  const confirmar = confirm('¿Seguro que deseas eliminar definitivamente esta reserva? No se podrá recuperar.');
+  if (!confirmar) return;
+
+  try {
+    await StorageService.deleteFromTrashPermanently(id);
+    AppState.trashReservas = StorageService.getLocalTrash();
+    renderAdminPanel();
+    showToast('🗑️ Reserva eliminada de forma permanente', 'info');
+  } catch (error) {
+    console.error('Error al borrar de papelera:', error);
+    showToast('Error al eliminar definitivamente', 'error');
+  }
+}
+
+function filtrarLogsAdmin(filtro) {
+  AppState.currentLogFilter = filtro;
+  renderAdminLogs();
+}
+
+async function limpiarHistorialLogs() {
+  const confirmar = confirm('¿Deseas vaciar todo el historial de logs de auditoría?');
+  if (!confirmar) return;
+
+  try {
+    await StorageService.clearAuditLogs();
+    AppState.auditLogs = [];
+    renderAdminPanel();
+    showToast('Historial de logs vaciado', 'info');
+  } catch (error) {
+    console.error('Error vaciando logs:', error);
+  }
+}
+
+function entrarModoAdmin() {
+  const pin = prompt('Introduce el PIN de Administrador (7171):');
+  if (pin === '7171') {
+    localStorage.setItem(PIN_STORAGE_KEY, '7171');
+    localStorage.setItem('chipiona_is_admin', 'true');
+    AppState.isAdmin = true;
+    document.documentElement.classList.add('is-admin');
+    switchTab('admin');
+    showToast('🛡️ Modo Administrador activado', 'success');
+  } else if (pin !== null) {
+    alert('❌ PIN incorrecto');
+  }
+}
+
+function salirModoAdmin() {
+  localStorage.setItem(PIN_STORAGE_KEY, '8080');
+  localStorage.removeItem('chipiona_is_admin');
+  AppState.isAdmin = false;
+  document.documentElement.classList.remove('is-admin');
+  switchTab('inicio');
+  showToast('Modo Administrador cerrado', 'info');
+}
+
 // Toast Notificaciones
 function showToast(message, type = 'info') {
   const container = document.getElementById('toast-container');
@@ -1141,19 +1451,28 @@ function showToast(message, type = 'info') {
 }
 
 // ==========================================
-// SEGURIDAD: CONTROL DE ACCESO POR PIN (8080)
+// SEGURIDAD: CONTROL DE ACCESO POR PIN (8080 familiar / 7171 admin)
 // ==========================================
 const PIN_CORRECTO = '8080';
+const PIN_ADMIN = '7171';
 const PIN_STORAGE_KEY = 'chipiona_auth_pin_verified';
 
 function checkAuthPIN() {
-  const isAuth = localStorage.getItem(PIN_STORAGE_KEY) === PIN_CORRECTO;
+  const savedPin = localStorage.getItem(PIN_STORAGE_KEY);
+  const isAuth = savedPin === PIN_CORRECTO || savedPin === PIN_ADMIN;
+  const isAdmin = localStorage.getItem('chipiona_is_admin') === 'true' || savedPin === PIN_ADMIN;
   const lockScreen = document.getElementById('screen-pin-lock');
-  if (!lockScreen) return;
 
   if (isAuth) {
     document.documentElement.classList.add('pin-verified');
-    lockScreen.remove();
+    if (isAdmin) {
+      document.documentElement.classList.add('is-admin');
+      AppState.isAdmin = true;
+    } else {
+      document.documentElement.classList.remove('is-admin');
+      AppState.isAdmin = false;
+    }
+    if (lockScreen) lockScreen.remove();
   }
 }
 
@@ -1169,6 +1488,7 @@ function setupPINAuth() {
   if (btnLock) {
     btnLock.addEventListener('click', () => {
       localStorage.removeItem(PIN_STORAGE_KEY);
+      localStorage.removeItem('chipiona_is_admin');
       location.reload();
     });
   }
@@ -1184,3 +1504,10 @@ window.switchTab = switchTab;
 window.selectHabitaciones = selectHabitaciones;
 window.checkAuthPIN = checkAuthPIN;
 window.validarPIN = validarPIN;
+window.renderAdminPanel = renderAdminPanel;
+window.restaurarReserva = restaurarReserva;
+window.eliminarReservaPermanente = eliminarReservaPermanente;
+window.filtrarLogsAdmin = filtrarLogsAdmin;
+window.limpiarHistorialLogs = limpiarHistorialLogs;
+window.entrarModoAdmin = entrarModoAdmin;
+window.salirModoAdmin = salirModoAdmin;
