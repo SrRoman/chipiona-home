@@ -1071,94 +1071,24 @@ function checkAuthPIN() {
   if (!lockScreen) return;
 
   if (isAuth) {
-    lockScreen.style.setProperty('display', 'none', 'important');
-    lockScreen.classList.add('hidden');
-  } else {
-    lockScreen.style.setProperty('display', 'flex', 'important');
-    lockScreen.classList.remove('hidden');
-    const inputPin = document.getElementById('input-pin');
-    if (inputPin) {
-      inputPin.value = '';
-      setTimeout(() => inputPin.focus(), 200);
-    }
+    document.documentElement.classList.add('pin-verified');
+    lockScreen.remove();
   }
 }
 
-function validarPIN() {
-  const inputPin = document.getElementById('input-pin');
-  const errorMsg = document.getElementById('pin-error-msg');
-  const lockScreen = document.getElementById('screen-pin-lock');
-  const container = document.getElementById('pin-input-container');
-
-  if (!inputPin || !lockScreen) return;
-
-  // Extraer únicamente los dígitos numéricos
-  const valor = inputPin.value.replace(/\D/g, '').trim();
-
-  if (valor === PIN_CORRECTO) {
-    localStorage.setItem(PIN_STORAGE_KEY, PIN_CORRECTO);
-    if (errorMsg) errorMsg.classList.add('hidden');
-    
-    // Ocultar pantalla de bloqueo de inmediato y de forma garantizada
-    lockScreen.classList.add('animate-fade-out');
-    setTimeout(() => {
-      lockScreen.style.setProperty('display', 'none', 'important');
-      lockScreen.classList.add('hidden');
-      lockScreen.classList.remove('animate-fade-out');
-    }, 150);
-
-    showToast('¡PIN correcto! Bienvenido/a a Casa Chipiona 🏖️', 'success');
-  } else {
-    if (errorMsg) errorMsg.classList.remove('hidden');
-    if (container) {
-      container.classList.add('animate-shake');
-      setTimeout(() => container.classList.remove('animate-shake'), 450);
-    }
-    inputPin.value = '';
-    inputPin.focus();
+function validarPIN(cand) {
+  if (typeof window.validarPINInline === 'function') {
+    window.validarPINInline(cand);
   }
 }
 
 function setupPINAuth() {
-  const form = document.getElementById('form-pin-lock');
-  const inputPin = document.getElementById('input-pin');
-  const errorMsg = document.getElementById('pin-error-msg');
-  const lockScreen = document.getElementById('screen-pin-lock');
-
-  if (!inputPin) return;
-
-  // Auto-validar automáticamente al teclear 4 dígitos
-  const handleInputCheck = () => {
-    if (errorMsg) errorMsg.classList.add('hidden');
-    const digits = inputPin.value.replace(/\D/g, '');
-    if (digits.length >= 4) {
-      validarPIN();
-    }
-  };
-
-  inputPin.addEventListener('input', handleInputCheck);
-  inputPin.addEventListener('keyup', (e) => {
-    if (e.key === 'Enter') {
-      validarPIN();
-    } else {
-      handleInputCheck();
-    }
-  });
-
-  if (form) {
-    form.addEventListener('submit', (e) => {
-      e.preventDefault();
-      validarPIN();
-    });
-  }
-
-  // Botón para bloquear / cerrar sesión manualmente
+  // Botón para bloquear / cerrar sesión manualmente (candado en la barra superior)
   const btnLock = document.getElementById('btn-lock-session');
   if (btnLock) {
     btnLock.addEventListener('click', () => {
       localStorage.removeItem(PIN_STORAGE_KEY);
-      checkAuthPIN();
-      showToast('Sesión bloqueada 🔒', 'info');
+      location.reload();
     });
   }
 }
