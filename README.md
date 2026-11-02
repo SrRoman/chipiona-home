@@ -11,7 +11,7 @@ Aplicación web diseñada con enfoque **Mobile-First** (optimizada al 100% para 
    - Indicador en tiempo real de **¿Quién está hoy en la casa?** (o si está libre).
    - Botón directo para **Ver Calendario** y botón destacado para **Añadir Reserva**.
    - Lista de las próximas visitas familiares.
-   - Acceso rápido a datos útiles: red Wi-Fi (con botón para copiar la contraseña en 1 toque), capacidad de habitaciones y normas básicas.
+   - Acceso rápido: información de habitaciones, normas y consejos editables con lápiz.
 
 2. **Añadir Reserva (Estilo Web de Hotel):**
    - Selector interactivo de rango de fechas (Fecha de Entrada y Fecha de Salida) con calendario visual integrado.
