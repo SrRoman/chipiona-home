@@ -1,1 +1,12 @@
-[]
+[
+  {
+    "id": "res-demo-2",
+    "nombre": "Primo Alejandro",
+    "checkIn": "2026-12-05",
+    "checkOut": "2026-12-10",
+    "habitaciones": 1,
+    "comentarios": "Vamos a pasar unos días de playa y comer en los chiringuitos de la Cruz del Mar.",
+    "createdAt": "2026-11-02T16:00:00.000Z",
+    "deletedAt": "2026-11-02T20:44:31.140Z"
+  }
+]

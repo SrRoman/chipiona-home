@@ -1190,8 +1190,76 @@ function renderAdminPanel() {
   if (kpiTrash) kpiTrash.textContent = (AppState.trashReservas || []).length;
   if (kpiLogs) kpiLogs.textContent = (AppState.auditLogs || []).length;
 
+  renderAdminActivas();
   renderAdminTrash();
   renderAdminLogs();
+}
+
+function renderAdminActivas() {
+  const container = document.getElementById('admin-activas-container');
+  if (!container) return;
+
+  const activas = AppState.reservas || [];
+  if (activas.length === 0) {
+    container.innerHTML = `
+      <div class="p-6 text-center text-xs text-slate-400 bg-slate-900/60 rounded-2xl border border-slate-800">
+        No hay reservas activas en este momento.
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = activas.map((r) => {
+    const color = getColorForName(r.nombre);
+    const noches = calculateNights(r.checkIn, r.checkOut);
+
+    return `
+      <div class="p-4 sm:p-5 rounded-2xl bg-slate-900/90 border border-slate-800 hover:border-sky-500/40 shadow-lg transition space-y-3">
+        <div class="flex items-start justify-between gap-3">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-2xl ${color.badge} flex items-center justify-center text-sm font-black shadow-md">
+              ${getInitials(r.nombre)}
+            </div>
+            <div>
+              <h4 class="text-sm sm:text-base font-extrabold text-white flex items-center gap-2">
+                ${escapeHtml(r.nombre)}
+                <span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold">
+                  Activa
+                </span>
+              </h4>
+              <p class="text-xs text-slate-400 mt-0.5">
+                📅 ${formatDateShort(r.checkIn)} → ${formatDateShort(r.checkOut)} · <span class="text-sky-300 font-medium">${noches} ${noches === 1 ? 'noche' : 'noches'}</span>
+              </p>
+            </div>
+          </div>
+          <span class="text-xs font-semibold px-2.5 py-1 rounded-xl bg-slate-800/80 text-sky-300 border border-slate-700/60 whitespace-nowrap">
+            🛏️ ${r.habitaciones} ${r.habitaciones === 1 ? 'habitación' : 'habitaciones'}
+          </span>
+        </div>
+
+        ${r.comentarios ? `
+          <div class="text-xs text-slate-300/90 bg-slate-950/60 p-3 rounded-xl border border-slate-800/60 leading-relaxed whitespace-pre-line">
+            💬 ${escapeHtml(r.comentarios)}
+          </div>
+        ` : ''}
+
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-2 border-t border-slate-800/80 text-xs">
+          <span class="text-[11px] text-slate-500 flex items-center gap-1">
+            🕒 Registrada: ${formatDateTime(r.createdAt)}
+          </span>
+          <div class="flex items-center gap-2 self-end sm:self-auto">
+            <button onclick="openModalDetalle('${r.id}')" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold transition">
+              🔍 Ver Detalle
+            </button>
+            <button onclick="adminCancelarReserva('${r.id}')" class="px-3 py-1.5 rounded-xl bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border border-rose-800/50 text-xs font-bold transition flex items-center gap-1">
+              <span>🗑️</span>
+              <span>Cancelar Reserva</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
 }
 
 function renderAdminTrash() {
@@ -1494,6 +1562,29 @@ function setupPINAuth() {
   }
 }
 
+function adminCancelarReserva(id) {
+  const reserva = AppState.reservas.find(r => r.id === id);
+  if (!reserva) return;
+  const confirmar = confirm(`¿Estás seguro de que deseas cancelar la reserva de ${reserva.nombre} (${formatDateShort(reserva.checkIn)} al ${formatDateShort(reserva.checkOut)})?\n\nLa reserva se moverá a la papelera del panel de administración y podrás recuperarla cuando quieras.`);
+  if (!confirmar) return;
+
+  StorageService.deleteReserva(id).then(async () => {
+    await loadReservas();
+    AppState.trashReservas = StorageService.getLocalTrash();
+    AppState.auditLogs = StorageService.getLocalAuditLogs();
+
+    renderInicio();
+    renderCalendar();
+    renderLista();
+    renderAdminPanel();
+
+    showToast(`Reserva de ${reserva.nombre} cancelada y movida a papelera`, 'info');
+  }).catch(error => {
+    console.error('Error al cancelar reserva en admin:', error);
+    showToast('Error al cancelar la reserva', 'error');
+  });
+}
+
 // Exponer funciones necesarias globalmente
 window.openModalReserva = openModalReserva;
 window.openModalDetalle = openModalDetalle;
@@ -1505,6 +1596,8 @@ window.selectHabitaciones = selectHabitaciones;
 window.checkAuthPIN = checkAuthPIN;
 window.validarPIN = validarPIN;
 window.renderAdminPanel = renderAdminPanel;
+window.renderAdminActivas = renderAdminActivas;
+window.adminCancelarReserva = adminCancelarReserva;
 window.restaurarReserva = restaurarReserva;
 window.eliminarReservaPermanente = eliminarReservaPermanente;
 window.filtrarLogsAdmin = filtrarLogsAdmin;

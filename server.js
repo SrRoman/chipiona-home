@@ -62,34 +62,17 @@ if (process.env.VERCEL) {
   }
 }
 
-// Datos iniciales de demostración de reservas si el archivo no existe
+// Datos iniciales de reservas (Reserva activa de Roman)
 function getInitialData() {
-  const today = new Date();
-  const format = (d) => d.toISOString().split('T')[0];
-  
-  const d1 = new Date(today.getFullYear(), today.getMonth(), 12);
-  const d2 = new Date(today.getFullYear(), today.getMonth(), 16);
-  const d3 = new Date(today.getFullYear(), today.getMonth() + 1, 5);
-  const d4 = new Date(today.getFullYear(), today.getMonth() + 1, 10);
-
   return [
     {
-      id: 'res-demo-1',
-      nombre: 'Tía Carmen',
-      checkIn: format(d1),
-      checkOut: format(d2),
-      habitaciones: 2,
-      comentarios: 'Llegaremos el viernes sobre las 18:00. Llevamos nosotros sábanas.',
-      createdAt: new Date().toISOString()
-    },
-    {
-      id: 'res-demo-2',
-      nombre: 'Primo Alejandro',
-      checkIn: format(d3),
-      checkOut: format(d4),
+      id: 'res-1793652501064-r0hx51',
+      nombre: 'Roman',
+      checkIn: '2026-11-02',
+      checkOut: '2026-11-03',
       habitaciones: 1,
-      comentarios: 'Voy con dos amigos a pasar el fin de semana y ver las carreras.',
-      createdAt: new Date().toISOString()
+      comentarios: 'Buenas Familia!! He creado esta APP para tener un poco de control y organizacion con quien se aloja en la casa de Chipiona, desde aqui podreis hacer reservas, eliminarlas (tened cuidado que podeis eliminar la de otras personas), seleccionar numero de habitaciones que vais a usar, y comentar cosas como voy con un invitado, etc. \n\nCualquier duda que tengais podeis preguntarla por el grupo de la familia, espero que os venga genial la aplicacion y cualquier cosita que querais implementar o modificar comentadselo a Alba.\n\nUn abrazo, Roman.',
+      createdAt: '2026-11-02T20:48:21.064Z'
     }
   ];
 }
@@ -106,6 +89,12 @@ function getDefaultCasaInfo() {
 function readReservas() {
   try {
     if (!fs.existsSync(DATA_FILE)) {
+      const seedData = path.join(__dirname, 'data', 'reservas.json');
+      if (fs.existsSync(seedData)) {
+        const seed = JSON.parse(fs.readFileSync(seedData, 'utf-8'));
+        fs.writeFileSync(DATA_FILE, JSON.stringify(seed, null, 2), 'utf-8');
+        return seed;
+      }
       const initial = getInitialData();
       fs.writeFileSync(DATA_FILE, JSON.stringify(initial, null, 2), 'utf-8');
       return initial;
@@ -114,7 +103,7 @@ function readReservas() {
     return JSON.parse(data || '[]');
   } catch (error) {
     console.error('Error al leer reservas:', error);
-    return [];
+    return getInitialData();
   }
 }
 
@@ -156,21 +145,27 @@ function writeCasaInfo(info) {
 function readLogs() {
   try {
     if (!fs.existsSync(LOGS_FILE)) {
+      const seedLogs = path.join(__dirname, 'data', 'audit_logs.json');
+      if (fs.existsSync(seedLogs)) {
+        const seed = JSON.parse(fs.readFileSync(seedLogs, 'utf-8'));
+        fs.writeFileSync(LOGS_FILE, JSON.stringify(seed, null, 2), 'utf-8');
+        return seed;
+      }
       const initialLogs = [
         {
-          id: 'log-seed-1',
+          id: 'log-1793652501241-l3fs4m',
           tipo: 'CREACION',
-          titulo: 'Nueva reserva: Tía Carmen',
-          detalle: '2 habitaciones',
-          timestamp: new Date(Date.now() - 3600000 * 48).toISOString(),
-          reservaId: 'res-demo-1'
+          titulo: 'Nueva reserva: Roman',
+          detalle: '2026-11-02 al 2026-11-03 (1 hab.)',
+          timestamp: '2026-11-02T20:48:21.241Z',
+          reservaId: 'res-1793652501064-r0hx51'
         },
         {
-          id: 'log-seed-2',
-          tipo: 'CREACION',
-          titulo: 'Nueva reserva: Primo Alejandro',
-          detalle: '1 habitación',
-          timestamp: new Date(Date.now() - 3600000 * 18).toISOString(),
+          id: 'log-1793652238728-qu1v7w',
+          tipo: 'ELIMINACION',
+          titulo: 'Reserva cancelada: Primo Alejandro',
+          detalle: '2026-12-05 al 2026-12-10 (1 hab.)',
+          timestamp: '2026-11-02T20:43:58.728Z',
           reservaId: 'res-demo-2'
         }
       ];
@@ -214,7 +209,26 @@ function addLogEntry(tipo, titulo, detalle, reservaId = null) {
 function readTrash() {
   try {
     if (!fs.existsSync(TRASH_FILE)) {
-      return [];
+      const seedTrash = path.join(__dirname, 'data', 'trash_reservas.json');
+      if (fs.existsSync(seedTrash)) {
+        const seed = JSON.parse(fs.readFileSync(seedTrash, 'utf-8'));
+        fs.writeFileSync(TRASH_FILE, JSON.stringify(seed, null, 2), 'utf-8');
+        return seed;
+      }
+      const initialTrash = [
+        {
+          id: 'res-demo-2',
+          nombre: 'Primo Alejandro',
+          checkIn: '2026-12-05',
+          checkOut: '2026-12-10',
+          habitaciones: 1,
+          comentarios: 'Vamos a pasar unos días de playa y comer en los chiringuitos de la Cruz del Mar.',
+          createdAt: '2026-11-02T16:00:00.000Z',
+          deletedAt: '2026-11-02T20:44:31.140Z'
+        }
+      ];
+      fs.writeFileSync(TRASH_FILE, JSON.stringify(initialTrash, null, 2), 'utf-8');
+      return initialTrash;
     }
     const data = fs.readFileSync(TRASH_FILE, 'utf-8');
     return JSON.parse(data || '[]');

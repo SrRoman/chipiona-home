@@ -1,11 +1,11 @@
 [
   {
-    "id": "res-demo-2",
-    "nombre": "Primo Alejandro",
-    "checkIn": "2026-12-05",
-    "checkOut": "2026-12-10",
+    "id": "res-1793652501064-r0hx51",
+    "nombre": "Roman",
+    "checkIn": "2026-11-02",
+    "checkOut": "2026-11-03",
     "habitaciones": 1,
-    "comentarios": "Vamos a pasar unos días de playa y comer en los chiringuitos de la Cruz del Mar.",
-    "createdAt": "2026-11-02T16:00:00.000Z"
+    "comentarios": "Buenas Familia!! He creado esta APP para tener un poco de control y organizacion con quien se aloja en la casa de Chipiona, desde aqui podreis hacer reservas, eliminarlas (tened cuidado que podeis eliminar la de otras personas), seleccionar numero de habitaciones que vais a usar, y comentar cosas como voy con un invitado, etc. \n\nCualquier duda que tengais podeis preguntarla por el grupo de la familia, espero que os venga genial la aplicacion y cualquier cosita que querais implementar o modificar comentadselo a Alba.\n\nUn abrazo, Roman.",
+    "createdAt": "2026-11-02T20:48:21.064Z"
   }
 ]

@@ -58,22 +58,42 @@ const StorageService = {
 
   // Obtener reservas de forma síncrona desde LocalStorage para carga instantánea
   getLocalReservas() {
+    let localData = [];
     try {
       const local = localStorage.getItem(this.STORAGE_KEY);
       if (local) {
         const parsed = JSON.parse(local);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return this.fixEncoding(parsed);
+          localData = this.fixEncoding(parsed);
         }
       }
     } catch (e) {
       console.warn('Error leyendo reservas locales:', e);
     }
-    const demo = this.getInitialDemoData();
+
+    if (localData.length === 0) {
+      localData = this.getInitialDemoData();
+    } else {
+      // Asegurar que la reserva de Roman está presente siempre que no haya sido eliminada a papelera
+      const trash = this.getLocalTrash();
+      const isRomanInTrash = trash.some(t => t.id === 'res-1793652501064-r0hx51');
+      const isRomanInLocal = localData.some(r => r.id === 'res-1793652501064-r0hx51');
+      if (!isRomanInTrash && !isRomanInLocal) {
+        const roman = this.getInitialDemoData().find(r => r.id === 'res-1793652501064-r0hx51');
+        if (roman) localData.push(roman);
+      }
+    }
+
+    // Filtrar de cualquier manera cualquier ID que resida en la papelera
+    const trash = this.getLocalTrash();
+    const deletedIds = new Set(trash.map(t => t.id));
+    const cleanReservas = localData.filter(r => !deletedIds.has(r.id));
+    cleanReservas.sort((a, b) => new Date(a.checkIn) - new Date(b.checkIn));
+
     try {
-      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(demo));
+      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(cleanReservas));
     } catch(e) {}
-    return demo;
+    return cleanReservas;
   },
 
   // Obtener info de la casa de forma síncrona desde LocalStorage
@@ -96,37 +116,43 @@ const StorageService = {
     return defaultInfo;
   },
 
-  // Obtener todas las reservas (con timeout de seguridad para no bloquear)
+  // Obtener todas las reservas (con fusión inteligente y timeout de seguridad para no bloquear)
   async getReservas() {
+    const local = this.getLocalReservas();
+    const trash = this.getLocalTrash();
+    const deletedIds = new Set(trash.map(t => t.id));
+
     if (this.isApiAvailable) {
       try {
         const res = await fetch('/api/reservas');
         if (res.ok) {
-          let data = await res.json();
-          data = this.fixEncoding(data);
-          localStorage.setItem(this.STORAGE_KEY, JSON.stringify(data));
-          return data;
+          let serverData = await res.json();
+          serverData = this.fixEncoding(serverData);
+          
+          // Fusión inteligente:
+          // 1. Filtrar del servidor lo que esté en la papelera local
+          const validServer = serverData.filter(r => !deletedIds.has(r.id));
+          
+          // 2. Fusión por ID preservando tanto lo local como lo del servidor
+          const map = new Map();
+          validServer.forEach(r => map.set(r.id, r));
+          local.forEach(r => {
+            if (!deletedIds.has(r.id)) {
+              map.set(r.id, r);
+            }
+          });
+
+          const merged = Array.from(map.values());
+          merged.sort((a, b) => new Date(a.checkIn) - new Date(b.checkIn));
+          localStorage.setItem(this.STORAGE_KEY, JSON.stringify(merged));
+          return merged;
         }
       } catch (e) {
         console.warn('Error al conectar con la API, usando LocalStorage:', e);
       }
     }
 
-    const local = localStorage.getItem(this.STORAGE_KEY);
-    if (local) {
-      try {
-        const parsed = JSON.parse(local);
-        const fixed = this.fixEncoding(parsed);
-        localStorage.setItem(this.STORAGE_KEY, JSON.stringify(fixed));
-        return fixed;
-      } catch (e) {
-        console.error('Error parseando reservas locales:', e);
-      }
-    }
-
-    const demoData = this.getInitialDemoData();
-    localStorage.setItem(this.STORAGE_KEY, JSON.stringify(demoData));
-    return demoData;
+    return local.filter(r => !deletedIds.has(r.id));
   },
 
   // Añadir una nueva reserva
@@ -224,20 +250,26 @@ const StorageService = {
   },
 
   async getAuditLogs() {
+    const localLogs = this.getLocalAuditLogs();
     if (this.isApiAvailable) {
       try {
         const res = await fetch('/api/logs');
         if (res.ok) {
-          let data = await res.json();
-          data = this.fixEncoding(data);
-          localStorage.setItem(this.LOGS_STORAGE_KEY, JSON.stringify(data));
-          return data;
+          let serverLogs = await res.json();
+          serverLogs = this.fixEncoding(serverLogs);
+          const map = new Map();
+          serverLogs.forEach(l => map.set(l.id, l));
+          localLogs.forEach(l => map.set(l.id, l));
+          const merged = Array.from(map.values());
+          merged.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+          localStorage.setItem(this.LOGS_STORAGE_KEY, JSON.stringify(merged));
+          return merged;
         }
       } catch (e) {
         console.warn('Error consultando /api/logs:', e);
       }
     }
-    return this.getLocalAuditLogs();
+    return localLogs;
   },
 
   addAuditLog(tipo, titulo, detalle, reservaId = null) {
@@ -296,24 +328,33 @@ const StorageService = {
     } catch (e) {
       console.warn('Error leyendo papelera local:', e);
     }
-    return [];
+    const def = this.getDefaultTrash();
+    try {
+      localStorage.setItem(this.TRASH_STORAGE_KEY, JSON.stringify(def));
+    } catch(e) {}
+    return def;
   },
 
   async getTrashReservas() {
+    const localTrash = this.getLocalTrash();
     if (this.isApiAvailable) {
       try {
         const res = await fetch('/api/trash');
         if (res.ok) {
-          let data = await res.json();
-          data = this.fixEncoding(data);
-          localStorage.setItem(this.TRASH_STORAGE_KEY, JSON.stringify(data));
-          return data;
+          let serverTrash = await res.json();
+          serverTrash = this.fixEncoding(serverTrash);
+          const map = new Map();
+          serverTrash.forEach(r => map.set(r.id, r));
+          localTrash.forEach(r => map.set(r.id, r));
+          const merged = Array.from(map.values());
+          localStorage.setItem(this.TRASH_STORAGE_KEY, JSON.stringify(merged));
+          return merged;
         }
       } catch (e) {
         console.warn('Error consultando /api/trash:', e);
       }
     }
-    return this.getLocalTrash();
+    return localTrash;
   },
 
   moveToTrash(reserva) {
@@ -476,29 +517,37 @@ const StorageService = {
   },
 
   getDefaultLogs() {
-    const today = new Date();
-    const format = (d) => d.toISOString().split('T')[0];
-    const d1 = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 4);
-    const d2 = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 8);
-    const d3 = new Date(today.getFullYear(), today.getMonth() + 1, 10);
-    const d4 = new Date(today.getFullYear(), today.getMonth() + 1, 15);
-
     return [
       {
-        id: 'log-seed-1',
+        id: 'log-1793652501241-l3fs4m',
         tipo: 'CREACION',
-        titulo: 'Nueva reserva: Tía Carmen',
-        detalle: `${format(d1)} al ${format(d2)} (2 habitaciones)`,
-        timestamp: new Date(Date.now() - 3600000 * 48).toISOString(),
-        reservaId: 'res-demo-1'
+        titulo: 'Nueva reserva: Roman',
+        detalle: '2026-11-02 al 2026-11-03 (1 hab.)',
+        timestamp: '2026-11-02T20:48:21.241Z',
+        reservaId: 'res-1793652501064-r0hx51'
       },
       {
-        id: 'log-seed-2',
-        tipo: 'CREACION',
-        titulo: 'Nueva reserva: Primo Alejandro',
-        detalle: `${format(d3)} al ${format(d4)} (1 habitación)`,
-        timestamp: new Date(Date.now() - 3600000 * 18).toISOString(),
+        id: 'log-1793652238728-qu1v7w',
+        tipo: 'ELIMINACION',
+        titulo: 'Reserva cancelada: Primo Alejandro',
+        detalle: '2026-12-05 al 2026-12-10 (1 hab.)',
+        timestamp: '2026-11-02T20:43:58.728Z',
         reservaId: 'res-demo-2'
+      }
+    ];
+  },
+
+  getDefaultTrash() {
+    return [
+      {
+        id: 'res-demo-2',
+        nombre: 'Primo Alejandro',
+        checkIn: '2026-12-05',
+        checkOut: '2026-12-10',
+        habitaciones: 1,
+        comentarios: 'Vamos a pasar unos días de playa y comer en los chiringuitos de la Cruz del Mar.',
+        createdAt: '2026-11-02T16:00:00.000Z',
+        deletedAt: '2026-11-02T20:44:31.140Z'
       }
     ];
   },
@@ -512,32 +561,15 @@ const StorageService = {
   },
 
   getInitialDemoData() {
-    const today = new Date();
-    const format = (d) => d.toISOString().split('T')[0];
-    
-    const d1 = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 4);
-    const d2 = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 8);
-    const d3 = new Date(today.getFullYear(), today.getMonth() + 1, 10);
-    const d4 = new Date(today.getFullYear(), today.getMonth() + 1, 15);
-
     return [
       {
-        id: 'res-demo-1',
-        nombre: 'Tía Carmen',
-        checkIn: format(d1),
-        checkOut: format(d2),
-        habitaciones: 2,
-        comentarios: 'Llegamos el viernes a la tarde. Llevamos nosotros toallas y sábanas para los niños.',
-        createdAt: new Date().toISOString()
-      },
-      {
-        id: 'res-demo-2',
-        nombre: 'Primo Alejandro',
-        checkIn: format(d3),
-        checkOut: format(d4),
+        id: 'res-1793652501064-r0hx51',
+        nombre: 'Roman',
+        checkIn: '2026-11-02',
+        checkOut: '2026-11-03',
         habitaciones: 1,
-        comentarios: 'Vamos 2 personas a pasar unos días de playa y comer en los chiringuitos de la Cruz del Mar.',
-        createdAt: new Date().toISOString()
+        comentarios: 'Buenas Familia!! He creado esta APP para tener un poco de control y organizacion con quien se aloja en la casa de Chipiona, desde aqui podreis hacer reservas, eliminarlas (tened cuidado que podeis eliminar la de otras personas), seleccionar numero de habitaciones que vais a usar, y comentar cosas como voy con un invitado, etc. \n\nCualquier duda que tengais podeis preguntarla por el grupo de la familia, espero que os venga genial la aplicacion y cualquier cosita que querais implementar o modificar comentadselo a Alba.\n\nUn abrazo, Roman.',
+        createdAt: '2026-11-02T20:48:21.064Z'
       }
     ];
   }
