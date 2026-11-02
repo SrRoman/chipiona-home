@@ -234,12 +234,10 @@ span.flatpickr-weekday {
   animation: fadeOut 0.25s ease-in forwards;
 }
 
-/* Asegurar que .hidden siempre prevalezca y oculte el elemento */
-.hidden {
-  display: none !important;
-}
-
-.modal-overlay.hidden {
+/* Asegurar que las vistas y modales se oculten sin romper clases responsivas de Tailwind */
+.tab-view.hidden,
+.modal-overlay.hidden,
+#screen-pin-lock.hidden {
   display: none !important;
 }
 
