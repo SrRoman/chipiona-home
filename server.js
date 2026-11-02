@@ -74,91 +74,104 @@ const dbCache = {
   casaInfo: null,
   logs: null,
   trash: null,
-  lastFetched: 0,
-  syncing: false
+  lastFetched: 0
 };
+
+let currentSyncPromise = null;
 
 // Sincronizar desde la nube (Gist)
 async function syncFromCloud(force = false) {
   const now = Date.now();
-  if (!force && dbCache.reservas && (now - dbCache.lastFetched < 3500)) {
+  if (!force && dbCache.reservas && (now - dbCache.lastFetched < 3000)) {
     return; // Usar caché reciente
   }
-  if (dbCache.syncing) return;
-  dbCache.syncing = true;
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 4500);
-    const res = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
-      headers: {
-        'Authorization': `token ${GH_TOKEN}`,
-        'User-Agent': 'ChipionaHome/1.0',
-        'Accept': 'application/vnd.github.v3+json'
-      },
-      signal: controller.signal
-    });
-    clearTimeout(timer);
-    if (res.ok) {
-      const data = await res.json();
-      if (data && data.files) {
-        if (data.files['reservas.json'] && data.files['reservas.json'].content) {
-          try {
-            dbCache.reservas = JSON.parse(data.files['reservas.json'].content);
-            fs.writeFileSync(DATA_FILE, JSON.stringify(dbCache.reservas, null, 2), 'utf-8');
-          } catch(e) {}
-        }
-        if (data.files['casa_info.json'] && data.files['casa_info.json'].content) {
-          try {
-            dbCache.casaInfo = JSON.parse(data.files['casa_info.json'].content);
-            fs.writeFileSync(INFO_FILE, JSON.stringify(dbCache.casaInfo, null, 2), 'utf-8');
-          } catch(e) {}
-        }
-        if (data.files['audit_logs.json'] && data.files['audit_logs.json'].content) {
-          try {
-            dbCache.logs = JSON.parse(data.files['audit_logs.json'].content);
-            fs.writeFileSync(LOGS_FILE, JSON.stringify(dbCache.logs, null, 2), 'utf-8');
-          } catch(e) {}
-        }
-        if (data.files['trash_reservas.json'] && data.files['trash_reservas.json'].content) {
-          try {
-            dbCache.trash = JSON.parse(data.files['trash_reservas.json'].content);
-            fs.writeFileSync(TRASH_FILE, JSON.stringify(dbCache.trash, null, 2), 'utf-8');
-          } catch(e) {}
-        }
-        dbCache.lastFetched = Date.now();
-      }
-    }
-  } catch (err) {
-    console.warn('Sincronización Cloud Gist DB (fallback a disco):', err.message);
-  } finally {
-    dbCache.syncing = false;
+  if (currentSyncPromise) {
+    return currentSyncPromise; // Esperar a la sincronización en curso
   }
-}
-
-// Guardar en la nube (Gist)
-function pushToCloud(filename, content) {
-  (async () => {
+  currentSyncPromise = (async () => {
     try {
-      await fetch(`https://api.github.com/gists/${GIST_ID}`, {
-        method: 'PATCH',
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 4500);
+      const res = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
         headers: {
           'Authorization': `token ${GH_TOKEN}`,
           'User-Agent': 'ChipionaHome/1.0',
-          'Accept': 'application/vnd.github.v3+json',
-          'Content-Type': 'application/json'
+          'Accept': 'application/vnd.github.v3+json'
         },
-        body: JSON.stringify({
-          files: {
-            [filename]: {
-              content: JSON.stringify(content, null, 2)
-            }
-          }
-        })
+        signal: controller.signal
       });
-    } catch (e) {
-      console.warn(`Error al subir ${filename} a Cloud Gist:`, e.message);
+      clearTimeout(timer);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.files) {
+          if (data.files['reservas.json'] && data.files['reservas.json'].content) {
+            try {
+              dbCache.reservas = JSON.parse(data.files['reservas.json'].content);
+              fs.writeFileSync(DATA_FILE, JSON.stringify(dbCache.reservas, null, 2), 'utf-8');
+            } catch(e) {}
+          }
+          if (data.files['casa_info.json'] && data.files['casa_info.json'].content) {
+            try {
+              dbCache.casaInfo = JSON.parse(data.files['casa_info.json'].content);
+              fs.writeFileSync(INFO_FILE, JSON.stringify(dbCache.casaInfo, null, 2), 'utf-8');
+            } catch(e) {}
+          }
+          if (data.files['audit_logs.json'] && data.files['audit_logs.json'].content) {
+            try {
+              dbCache.logs = JSON.parse(data.files['audit_logs.json'].content);
+              fs.writeFileSync(LOGS_FILE, JSON.stringify(dbCache.logs, null, 2), 'utf-8');
+            } catch(e) {}
+          }
+          if (data.files['trash_reservas.json'] && data.files['trash_reservas.json'].content) {
+            try {
+              dbCache.trash = JSON.parse(data.files['trash_reservas.json'].content);
+              fs.writeFileSync(TRASH_FILE, JSON.stringify(dbCache.trash, null, 2), 'utf-8');
+            } catch(e) {}
+          }
+          dbCache.lastFetched = Date.now();
+        }
+      }
+    } catch (err) {
+      console.warn('Sincronización Cloud Gist DB (fallback a disco):', err.message);
+    } finally {
+      currentSyncPromise = null;
     }
   })();
+  return currentSyncPromise;
+}
+
+// Guardar en la nube (Gist) esperando confirmación antes de pausar en Lambda
+async function pushToCloud(filename, content) {
+  try {
+    dbCache.lastFetched = Date.now();
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 4000);
+    const res = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `token ${GH_TOKEN}`,
+        'User-Agent': 'ChipionaHome/1.0',
+        'Accept': 'application/vnd.github.v3+json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        files: {
+          [filename]: {
+            content: JSON.stringify(content, null, 2)
+          }
+        }
+      }),
+      signal: controller.signal
+    });
+    clearTimeout(timer);
+    if (!res.ok) {
+      console.warn(`Error al subir ${filename} a Cloud Gist:`, res.status);
+    } else {
+      dbCache.lastFetched = Date.now();
+    }
+  } catch (e) {
+    console.warn(`Error de red al enviar ${filename} a Cloud Gist:`, e.message);
+  }
 }
 
 // Datos iniciales de reservas (Reserva activa de Roman)
@@ -212,11 +225,11 @@ function readReservas() {
   return initial;
 }
 
-function writeReservas(reservas) {
+async function writeReservas(reservas) {
   try {
     dbCache.reservas = reservas;
     fs.writeFileSync(DATA_FILE, JSON.stringify(reservas, null, 2), 'utf-8');
-    pushToCloud('reservas.json', reservas);
+    await pushToCloud('reservas.json', reservas);
     return true;
   } catch (error) {
     console.error('Error al guardar reservas:', error);
@@ -251,11 +264,11 @@ function readCasaInfo() {
   return initial;
 }
 
-function writeCasaInfo(info) {
+async function writeCasaInfo(info) {
   try {
     dbCache.casaInfo = info;
     fs.writeFileSync(INFO_FILE, JSON.stringify(info, null, 2), 'utf-8');
-    pushToCloud('casa_info.json', info);
+    await pushToCloud('casa_info.json', info);
     return true;
   } catch (error) {
     console.error('Error al guardar información de la casa:', error);
@@ -299,11 +312,11 @@ function readLogs() {
   return initialLogs;
 }
 
-function writeLogs(logs) {
+async function writeLogs(logs) {
   try {
     dbCache.logs = logs;
     fs.writeFileSync(LOGS_FILE, JSON.stringify(logs, null, 2), 'utf-8');
-    pushToCloud('audit_logs.json', logs);
+    await pushToCloud('audit_logs.json', logs);
     return true;
   } catch (error) {
     console.error('Error al guardar logs:', error);
@@ -311,7 +324,7 @@ function writeLogs(logs) {
   }
 }
 
-function addLogEntry(tipo, titulo, detalle, reservaId = null) {
+async function addLogEntry(tipo, titulo, detalle, reservaId = null) {
   const logs = readLogs();
   const entry = {
     id: 'log-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6),
@@ -323,7 +336,7 @@ function addLogEntry(tipo, titulo, detalle, reservaId = null) {
   };
   logs.unshift(entry);
   if (logs.length > 250) logs.pop();
-  writeLogs(logs);
+  await writeLogs(logs);
   return entry;
 }
 
@@ -363,11 +376,11 @@ function readTrash() {
   return initialTrash;
 }
 
-function writeTrash(trash) {
+async function writeTrash(trash) {
   try {
     dbCache.trash = trash;
     fs.writeFileSync(TRASH_FILE, JSON.stringify(trash, null, 2), 'utf-8');
-    pushToCloud('trash_reservas.json', trash);
+    await pushToCloud('trash_reservas.json', trash);
     return true;
   } catch (error) {
     console.error('Error al guardar papelera:', error);
@@ -453,9 +466,9 @@ app.post('/api/reservas', async (req, res) => {
 
   reservas.push(nueva);
   reservas.sort((a, b) => new Date(a.checkIn) - new Date(b.checkIn));
-  writeReservas(reservas);
+  await writeReservas(reservas);
 
-  addLogEntry('CREACION', `Nueva reserva: ${nueva.nombre}`, `${nueva.checkIn} al ${nueva.checkOut} (${nueva.habitaciones} hab.)`, nueva.id);
+  await addLogEntry('CREACION', `Nueva reserva: ${nueva.nombre}`, `${nueva.checkIn} al ${nueva.checkOut} (${nueva.habitaciones} hab.)`, nueva.id);
 
   res.status(201).json(nueva);
 });
@@ -471,7 +484,7 @@ app.delete('/api/reservas/:id', async (req, res) => {
   }
 
   const eliminada = reservas.splice(index, 1)[0];
-  writeReservas(reservas);
+  await writeReservas(reservas);
 
   // Mover a la papelera
   const trash = readTrash();
@@ -480,10 +493,10 @@ app.delete('/api/reservas/:id', async (req, res) => {
     deletedAt: new Date().toISOString()
   };
   trash.unshift(itemTrash);
-  writeTrash(trash);
+  await writeTrash(trash);
 
   // Log de auditoría
-  addLogEntry('ELIMINACION', `Reserva cancelada: ${eliminada.nombre}`, `${eliminada.checkIn} al ${eliminada.checkOut} (${eliminada.habitaciones} hab.)`, eliminada.id);
+  await addLogEntry('ELIMINACION', `Reserva cancelada: ${eliminada.nombre}`, `${eliminada.checkIn} al ${eliminada.checkOut} (${eliminada.habitaciones} hab.)`, eliminada.id);
 
   res.json({ success: true, eliminada, trash: itemTrash });
 });
@@ -497,17 +510,17 @@ app.get('/api/logs', async (req, res) => {
   res.json(logs);
 });
 
-app.post('/api/logs', (req, res) => {
+app.post('/api/logs', async (req, res) => {
   const { tipo, titulo, detalle, reservaId } = req.body;
   if (!tipo || !titulo) {
     return res.status(400).json({ error: 'Faltan campos para registrar el log' });
   }
-  const entry = addLogEntry(tipo, titulo, detalle || '', reservaId || null);
+  const entry = await addLogEntry(tipo, titulo, detalle || '', reservaId || null);
   res.status(201).json(entry);
 });
 
-app.delete('/api/logs', (req, res) => {
-  writeLogs([]);
+app.delete('/api/logs', async (req, res) => {
+  await writeLogs([]);
   res.json({ success: true });
 });
 
@@ -564,7 +577,7 @@ app.post('/api/trash/restore/:id', async (req, res) => {
 
   // Quitar de papelera y agregar a reservas
   trash.splice(itemIndex, 1);
-  writeTrash(trash);
+  await writeTrash(trash);
 
   const restaurada = {
     ...item,
@@ -573,9 +586,9 @@ app.post('/api/trash/restore/:id', async (req, res) => {
   delete restaurada.deletedAt;
   reservas.push(restaurada);
   reservas.sort((a, b) => new Date(a.checkIn) - new Date(b.checkIn));
-  writeReservas(reservas);
+  await writeReservas(reservas);
 
-  addLogEntry('RESTAURACION', `Reserva restaurada: ${restaurada.nombre}`, `${restaurada.checkIn} al ${restaurada.checkOut} (${restaurada.habitaciones} hab.)`, restaurada.id);
+  await addLogEntry('RESTAURACION', `Reserva restaurada: ${restaurada.nombre}`, `${restaurada.checkIn} al ${restaurada.checkOut} (${restaurada.habitaciones} hab.)`, restaurada.id);
 
   res.json({ success: true, reserva: restaurada });
 });
@@ -585,7 +598,7 @@ app.delete('/api/trash/:id', async (req, res) => {
   const { id } = req.params;
   let trash = readTrash();
   trash = trash.filter(r => r.id !== id);
-  writeTrash(trash);
+  await writeTrash(trash);
   res.json({ success: true });
 });
 
@@ -605,7 +618,7 @@ app.post('/api/casa-info', async (req, res) => {
     normas: typeof normas === 'string' ? normas : '',
     consejos: typeof consejos === 'string' ? consejos : ''
   };
-  writeCasaInfo(info);
+  await writeCasaInfo(info);
   res.json({ success: true, info });
 });
 
