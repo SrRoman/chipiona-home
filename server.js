@@ -14,6 +14,11 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(__dirname));
 
+// Ruta raíz
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
+});
+
 // Asegurar carpeta y archivo de datos
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
