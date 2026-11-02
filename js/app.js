@@ -96,16 +96,45 @@ function initApp() {
     console.error('Error renderizando vistas iniciales:', err);
   }
 
-  // 6. En segundo plano: sincronizar con servidor si está disponible
+  // 6. En segundo plano: sincronizar con servidor y base de datos cloud
   syncBackendInBackground();
+
+  // 7. Sincronización periódica automática cada 15 segundos
+  if (!window._chipionaSyncInterval) {
+    window._chipionaSyncInterval = setInterval(syncBackendInBackground, 15000);
+  }
 }
 
 async function syncBackendInBackground() {
   try {
     if (typeof StorageService === 'undefined') return;
     await StorageService.init();
-    if (StorageService.isApiAvailable) {
-      await Promise.all([loadReservas(), loadCasaInfo(), loadAuditLogs(), loadTrash()]);
+    const [reservas, casaInfo, logs, trash] = await Promise.all([
+      StorageService.getReservas().catch(err => { console.warn(err); return null; }),
+      StorageService.getCasaInfo().catch(err => { console.warn(err); return null; }),
+      StorageService.getAuditLogs().catch(err => { console.warn(err); return null; }),
+      StorageService.getTrashReservas().catch(err => { console.warn(err); return null; })
+    ]);
+
+    let changed = false;
+    if (reservas && JSON.stringify(reservas) !== JSON.stringify(AppState.reservas)) {
+      AppState.reservas = reservas;
+      changed = true;
+    }
+    if (casaInfo && JSON.stringify(casaInfo) !== JSON.stringify(AppState.casaInfo)) {
+      AppState.casaInfo = casaInfo;
+      changed = true;
+    }
+    if (logs && JSON.stringify(logs) !== JSON.stringify(AppState.auditLogs)) {
+      AppState.auditLogs = logs;
+      changed = true;
+    }
+    if (trash && JSON.stringify(trash) !== JSON.stringify(AppState.trashReservas)) {
+      AppState.trashReservas = trash;
+      changed = true;
+    }
+
+    if (changed) {
       renderInicio();
       renderCalendar();
       renderLista();
@@ -115,7 +144,7 @@ async function syncBackendInBackground() {
       }
     }
   } catch (e) {
-    console.log('Sincronización en segundo plano lista');
+    console.warn('Sincronización en segundo plano:', e);
   }
 }
 

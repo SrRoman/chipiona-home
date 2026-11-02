@@ -1,10 +1,10 @@
 /**
  * Capa de persistencia para Casa Chipiona
- * Soporta sincronización automática con API REST (servidor local o nube)
- * y persistencia en LocalStorage para funcionamiento 100% autónomo.
+ * Sincronización en tiempo real con Base de Datos Cloud (GitHub Gist DB)
+ * y persistencia en LocalStorage para funcionamiento ultra-rápido y offline.
  */
 const StorageService = {
-  isApiAvailable: false,
+  isApiAvailable: true,
   STORAGE_KEY: 'chipiona_reservas_data',
   CASA_INFO_KEY: 'chipiona_casa_info_data',
   LOGS_STORAGE_KEY: 'chipiona_audit_logs',
@@ -39,24 +39,22 @@ const StorageService = {
     return obj;
   },
 
-  // Inicializar y detectar si hay servidor backend activo
+  // Inicializar y conectar con la base de datos cloud
   async init() {
+    this.isApiAvailable = true;
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 1200);
-      const res = await fetch('/api/reservas', { signal: controller.signal });
-      clearTimeout(timeoutId);
+      const res = await fetch('/api/reservas');
       if (res.ok) {
         this.isApiAvailable = true;
-        console.log('✅ Conectado al servidor backend (/api/reservas)');
+        console.log('✅ Conectado a la Base de Datos Cloud (/api/reservas)');
       }
     } catch (e) {
-      this.isApiAvailable = false;
-      console.log('ℹ️ Modo sin servidor: usando almacenamiento local (LocalStorage)');
+      console.warn('ℹ️ Servidor temporalmente no accesible, usando caché local:', e);
+      this.isApiAvailable = true;
     }
   },
 
-  // Obtener reservas de forma síncrona desde LocalStorage para carga instantánea
+  // Obtener reservas de forma síncrona desde LocalStorage para carga instantánea en 0ms
   getLocalReservas() {
     let localData = [];
     try {
@@ -74,26 +72,20 @@ const StorageService = {
     if (localData.length === 0) {
       localData = this.getInitialDemoData();
     } else {
-      // Asegurar que la reserva de Roman está presente siempre que no haya sido eliminada a papelera
-      const trash = this.getLocalTrash();
-      const isRomanInTrash = trash.some(t => t.id === 'res-1793652501064-r0hx51');
-      const isRomanInLocal = localData.some(r => r.id === 'res-1793652501064-r0hx51');
-      if (!isRomanInTrash && !isRomanInLocal) {
-        const roman = this.getInitialDemoData().find(r => r.id === 'res-1793652501064-r0hx51');
-        if (roman) localData.push(roman);
-      }
+      // Asegurar que las reservas base (Roman) estén presentes
+      const initial = this.getInitialDemoData();
+      initial.forEach(initRes => {
+        if (!localData.some(r => r.id === initRes.id)) {
+          localData.push(initRes);
+        }
+      });
     }
 
-    // Filtrar de cualquier manera cualquier ID que resida en la papelera
-    const trash = this.getLocalTrash();
-    const deletedIds = new Set(trash.map(t => t.id));
-    const cleanReservas = localData.filter(r => !deletedIds.has(r.id));
-    cleanReservas.sort((a, b) => new Date(a.checkIn) - new Date(b.checkIn));
-
+    localData.sort((a, b) => new Date(a.checkIn) - new Date(b.checkIn));
     try {
-      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(cleanReservas));
+      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(localData));
     } catch(e) {}
-    return cleanReservas;
+    return localData;
   },
 
   // Obtener info de la casa de forma síncrona desde LocalStorage
@@ -116,92 +108,77 @@ const StorageService = {
     return defaultInfo;
   },
 
-  // Obtener todas las reservas (con fusión inteligente y timeout de seguridad para no bloquear)
+  // Obtener todas las reservas desde la base de datos cloud con fallback local
   async getReservas() {
     const local = this.getLocalReservas();
-    const trash = this.getLocalTrash();
-    const deletedIds = new Set(trash.map(t => t.id));
-
-    if (this.isApiAvailable) {
-      try {
-        const res = await fetch('/api/reservas');
-        if (res.ok) {
-          let serverData = await res.json();
-          serverData = this.fixEncoding(serverData);
-          
-          // Fusión inteligente:
-          // 1. Filtrar del servidor lo que esté en la papelera local
-          const validServer = serverData.filter(r => !deletedIds.has(r.id));
-          
-          // 2. Fusión por ID preservando tanto lo local como lo del servidor
-          const map = new Map();
-          validServer.forEach(r => map.set(r.id, r));
-          local.forEach(r => {
-            if (!deletedIds.has(r.id)) {
-              map.set(r.id, r);
-            }
-          });
-
-          const merged = Array.from(map.values());
-          merged.sort((a, b) => new Date(a.checkIn) - new Date(b.checkIn));
-          localStorage.setItem(this.STORAGE_KEY, JSON.stringify(merged));
-          return merged;
+    try {
+      const res = await fetch('/api/reservas');
+      if (res.ok) {
+        let serverData = await res.json();
+        serverData = this.fixEncoding(serverData);
+        if (Array.isArray(serverData)) {
+          serverData.sort((a, b) => new Date(a.checkIn) - new Date(b.checkIn));
+          localStorage.setItem(this.STORAGE_KEY, JSON.stringify(serverData));
+          return serverData;
         }
-      } catch (e) {
-        console.warn('Error al conectar con la API, usando LocalStorage:', e);
       }
+    } catch (e) {
+      console.warn('Error conectando a /api/reservas, usando datos locales:', e);
     }
-
-    return local.filter(r => !deletedIds.has(r.id));
+    return local;
   },
 
-  // Añadir una nueva reserva
+  // Añadir una nueva reserva a la base de datos cloud
   async addReserva(reservaData) {
-    if (this.isApiAvailable) {
-      try {
-        const res = await fetch('/api/reservas', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json; charset=utf-8' },
-          body: JSON.stringify(reservaData),
-        });
+    try {
+      const res = await fetch('/api/reservas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json; charset=utf-8' },
+        body: JSON.stringify(reservaData),
+      });
 
-        const data = await res.json();
-        if (!res.ok) {
-          throw new Error(data.error || 'Error al guardar la reserva');
-        }
-        const fixed = this.fixEncoding(data);
-        this.addAuditLog('CREACION', `Nueva reserva: ${fixed.nombre}`, `${fixed.checkIn} al ${fixed.checkOut} (${fixed.habitaciones} hab.)`, fixed.id);
-        return fixed;
-      } catch (e) {
-        if (this.isApiAvailable) {
-          throw e;
-        }
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Error al guardar la reserva');
       }
+      const fixed = this.fixEncoding(data);
+      
+      const local = this.getLocalReservas().filter(r => r.id !== fixed.id);
+      local.push(fixed);
+      local.sort((a, b) => new Date(a.checkIn) - new Date(b.checkIn));
+      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(local));
+
+      this.addAuditLog('CREACION', `Nueva reserva: ${fixed.nombre}`, `${fixed.checkIn} al ${fixed.checkOut} (${fixed.habitaciones} hab.)`, fixed.id);
+      return fixed;
+    } catch (e) {
+      if (e.message && e.message.includes('Conflicto')) {
+        throw e;
+      }
+      console.warn('API no disponible, guardando localmente:', e);
+      const reservas = this.getLocalReservas();
+      this.validarDisponibilidad(reservaData, reservas);
+
+      const nueva = {
+        id: 'res-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6),
+        nombre: reservaData.nombre.trim(),
+        checkIn: reservaData.checkIn,
+        checkOut: reservaData.checkOut,
+        habitaciones: parseInt(reservaData.habitaciones, 10),
+        comentarios: (reservaData.comentarios || '').trim(),
+        createdAt: new Date().toISOString()
+      };
+
+      reservas.push(nueva);
+      reservas.sort((a, b) => new Date(a.checkIn) - new Date(b.checkIn));
+      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(reservas));
+      this.addAuditLog('CREACION', `Nueva reserva: ${nueva.nombre}`, `${nueva.checkIn} al ${nueva.checkOut} (${nueva.habitaciones} hab.)`, nueva.id);
+      return nueva;
     }
-
-    const reservas = await this.getReservas();
-    this.validarDisponibilidad(reservaData, reservas);
-
-    const nueva = {
-      id: 'res-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6),
-      nombre: reservaData.nombre.trim(),
-      checkIn: reservaData.checkIn,
-      checkOut: reservaData.checkOut,
-      habitaciones: parseInt(reservaData.habitaciones, 10),
-      comentarios: (reservaData.comentarios || '').trim(),
-      createdAt: new Date().toISOString()
-    };
-
-    reservas.push(nueva);
-    reservas.sort((a, b) => new Date(a.checkIn) - new Date(b.checkIn));
-    localStorage.setItem(this.STORAGE_KEY, JSON.stringify(reservas));
-    this.addAuditLog('CREACION', `Nueva reserva: ${nueva.nombre}`, `${nueva.checkIn} al ${nueva.checkOut} (${nueva.habitaciones} hab.)`, nueva.id);
-    return nueva;
   },
 
-  // Eliminar / Cancelar reserva (La mueve a la papelera para poder recuperarla)
+  // Eliminar / Cancelar reserva (La mueve a la papelera en la nube para poder recuperarla)
   async deleteReserva(id) {
-    const reservas = await this.getReservas();
+    const reservas = this.getLocalReservas();
     const reservaABorrar = reservas.find((r) => r.id === id);
 
     if (reservaABorrar) {
@@ -209,17 +186,17 @@ const StorageService = {
       this.addAuditLog('ELIMINACION', `Reserva cancelada: ${reservaABorrar.nombre}`, `${reservaABorrar.checkIn} al ${reservaABorrar.checkOut} (${reservaABorrar.habitaciones} hab.)`, id);
     }
 
-    if (this.isApiAvailable) {
-      try {
-        const res = await fetch(`/api/reservas/${id}`, {
-          method: 'DELETE'
-        });
-        if (res.ok) {
-          return true;
-        }
-      } catch (e) {
-        console.warn('Error al eliminar en la API, borrando localmente:', e);
+    try {
+      const res = await fetch(`/api/reservas/${id}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        const filtradas = reservas.filter((r) => r.id !== id);
+        localStorage.setItem(this.STORAGE_KEY, JSON.stringify(filtradas));
+        return true;
       }
+    } catch (e) {
+      console.warn('Error al eliminar en la API, borrando localmente:', e);
     }
 
     const filtradas = reservas.filter((r) => r.id !== id);
@@ -251,23 +228,19 @@ const StorageService = {
 
   async getAuditLogs() {
     const localLogs = this.getLocalAuditLogs();
-    if (this.isApiAvailable) {
-      try {
-        const res = await fetch('/api/logs');
-        if (res.ok) {
-          let serverLogs = await res.json();
-          serverLogs = this.fixEncoding(serverLogs);
-          const map = new Map();
-          serverLogs.forEach(l => map.set(l.id, l));
-          localLogs.forEach(l => map.set(l.id, l));
-          const merged = Array.from(map.values());
-          merged.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-          localStorage.setItem(this.LOGS_STORAGE_KEY, JSON.stringify(merged));
-          return merged;
+    try {
+      const res = await fetch('/api/logs');
+      if (res.ok) {
+        let serverLogs = await res.json();
+        serverLogs = this.fixEncoding(serverLogs);
+        if (Array.isArray(serverLogs)) {
+          serverLogs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+          localStorage.setItem(this.LOGS_STORAGE_KEY, JSON.stringify(serverLogs));
+          return serverLogs;
         }
-      } catch (e) {
-        console.warn('Error consultando /api/logs:', e);
       }
+    } catch (e) {
+      console.warn('Error consultando /api/logs:', e);
     }
     return localLogs;
   },
@@ -284,18 +257,16 @@ const StorageService = {
     };
 
     logs.unshift(entry);
-    if (logs.length > 250) logs.pop(); // Mantener hasta 250 logs
+    if (logs.length > 250) logs.pop();
     try {
       localStorage.setItem(this.LOGS_STORAGE_KEY, JSON.stringify(logs));
     } catch(e) {}
 
-    if (this.isApiAvailable) {
-      fetch('/api/logs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json; charset=utf-8' },
-        body: JSON.stringify(entry)
-      }).catch(() => {});
-    }
+    fetch('/api/logs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      body: JSON.stringify(entry)
+    }).catch(() => {});
 
     return entry;
   },
@@ -305,11 +276,9 @@ const StorageService = {
       localStorage.setItem(this.LOGS_STORAGE_KEY, JSON.stringify([]));
     } catch(e) {}
 
-    if (this.isApiAvailable) {
-      try {
-        await fetch('/api/logs', { method: 'DELETE' });
-      } catch(e) {}
-    }
+    try {
+      await fetch('/api/logs', { method: 'DELETE' });
+    } catch(e) {}
     return true;
   },
 
@@ -337,22 +306,18 @@ const StorageService = {
 
   async getTrashReservas() {
     const localTrash = this.getLocalTrash();
-    if (this.isApiAvailable) {
-      try {
-        const res = await fetch('/api/trash');
-        if (res.ok) {
-          let serverTrash = await res.json();
-          serverTrash = this.fixEncoding(serverTrash);
-          const map = new Map();
-          serverTrash.forEach(r => map.set(r.id, r));
-          localTrash.forEach(r => map.set(r.id, r));
-          const merged = Array.from(map.values());
-          localStorage.setItem(this.TRASH_STORAGE_KEY, JSON.stringify(merged));
-          return merged;
+    try {
+      const res = await fetch('/api/trash');
+      if (res.ok) {
+        let serverTrash = await res.json();
+        serverTrash = this.fixEncoding(serverTrash);
+        if (Array.isArray(serverTrash)) {
+          localStorage.setItem(this.TRASH_STORAGE_KEY, JSON.stringify(serverTrash));
+          return serverTrash;
         }
-      } catch (e) {
-        console.warn('Error consultando /api/trash:', e);
       }
+    } catch (e) {
+      console.warn('Error consultando /api/trash:', e);
     }
     return localTrash;
   },
@@ -363,7 +328,6 @@ const StorageService = {
       ...reserva,
       deletedAt: new Date().toISOString()
     };
-    // Evitar duplicados en papelera
     const filtrada = trash.filter(r => r.id !== item.id);
     filtrada.unshift(item);
     try {
@@ -379,41 +343,48 @@ const StorageService = {
       throw new Error('La reserva ya no se encuentra en la papelera');
     }
 
-    // 1. Validar que no haya conflictos de habitaciones en esas fechas
-    const reservas = await this.getReservas();
-    this.validarDisponibilidad(item, reservas);
-
-    // 2. Añadir de nuevo a las reservas activas
-    const restaurada = {
-      id: item.id,
-      nombre: item.nombre,
-      checkIn: item.checkIn,
-      checkOut: item.checkOut,
-      habitaciones: parseInt(item.habitaciones, 10),
-      comentarios: item.comentarios || '',
-      createdAt: item.createdAt || new Date().toISOString(),
-      restoredAt: new Date().toISOString()
-    };
-
-    reservas.push(restaurada);
-    reservas.sort((a, b) => new Date(a.checkIn) - new Date(b.checkIn));
-    localStorage.setItem(this.STORAGE_KEY, JSON.stringify(reservas));
-
-    // 3. Quitar de la papelera
-    const nuevoTrash = trash.filter(r => r.id !== id);
-    localStorage.setItem(this.TRASH_STORAGE_KEY, JSON.stringify(nuevoTrash));
-
-    // 4. Registrar en logs
-    this.addAuditLog('RESTAURACION', `Reserva restaurada: ${restaurada.nombre}`, `${restaurada.checkIn} al ${restaurada.checkOut} (${restaurada.habitaciones} hab.)`, restaurada.id);
-
-    // 5. Notificar a API si existe
-    if (this.isApiAvailable) {
-      try {
-        await fetch(`/api/trash/restore/${id}`, { method: 'POST' });
-      } catch(e) {}
+    try {
+      const res = await fetch(`/api/trash/restore/${id}`, { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        const restaurada = this.fixEncoding(data.reserva || item);
+        const reservas = this.getLocalReservas().filter(r => r.id !== id);
+        reservas.push(restaurada);
+        reservas.sort((a, b) => new Date(a.checkIn) - new Date(b.checkIn));
+        localStorage.setItem(this.STORAGE_KEY, JSON.stringify(reservas));
+        const nuevoTrash = trash.filter(r => r.id !== id);
+        localStorage.setItem(this.TRASH_STORAGE_KEY, JSON.stringify(nuevoTrash));
+        this.addAuditLog('RESTAURACION', `Reserva restaurada: ${restaurada.nombre}`, `${restaurada.checkIn} al ${restaurada.checkOut} (${restaurada.habitaciones} hab.)`, restaurada.id);
+        return restaurada;
+      } else {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Error al restaurar');
+      }
+    } catch (e) {
+      if (e.message && e.message.includes('Conflicto')) {
+        throw e;
+      }
+      console.warn('Fallo API restore, ejecutando local:', e);
+      const reservas = this.getLocalReservas();
+      this.validarDisponibilidad(item, reservas);
+      const restaurada = {
+        id: item.id,
+        nombre: item.nombre,
+        checkIn: item.checkIn,
+        checkOut: item.checkOut,
+        habitaciones: parseInt(item.habitaciones, 10),
+        comentarios: item.comentarios || '',
+        createdAt: item.createdAt || new Date().toISOString(),
+        restoredAt: new Date().toISOString()
+      };
+      reservas.push(restaurada);
+      reservas.sort((a, b) => new Date(a.checkIn) - new Date(b.checkIn));
+      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(reservas));
+      const nuevoTrash = trash.filter(r => r.id !== id);
+      localStorage.setItem(this.TRASH_STORAGE_KEY, JSON.stringify(nuevoTrash));
+      this.addAuditLog('RESTAURACION', `Reserva restaurada: ${restaurada.nombre}`, `${restaurada.checkIn} al ${restaurada.checkOut} (${restaurada.habitaciones} hab.)`, restaurada.id);
+      return restaurada;
     }
-
-    return restaurada;
   },
 
   async deleteFromTrashPermanently(id) {
@@ -421,66 +392,51 @@ const StorageService = {
     const nuevoTrash = trash.filter(r => r.id !== id);
     localStorage.setItem(this.TRASH_STORAGE_KEY, JSON.stringify(nuevoTrash));
 
-    if (this.isApiAvailable) {
-      try {
-        await fetch(`/api/trash/${id}`, { method: 'DELETE' });
-      } catch(e) {}
-    }
+    try {
+      await fetch(`/api/trash/${id}`, { method: 'DELETE' });
+    } catch(e) {}
     return true;
   },
 
-  // Obtener Información de La Casa (Habitaciones, Normas, Consejos)
+  // ========================================================
+  // INFORMACIÓN DE LA CASA (HABITACIONES, NORMAS, CONSEJOS)
+  // ========================================================
   async getCasaInfo() {
-    if (this.isApiAvailable) {
-      try {
-        const res = await fetch('/api/casa-info');
-        if (res.ok) {
-          let data = await res.json();
-          data = this.fixEncoding(data);
+    try {
+      const res = await fetch('/api/casa-info');
+      if (res.ok) {
+        let data = await res.json();
+        data = this.fixEncoding(data);
+        if (data && data.habitaciones) {
           localStorage.setItem(this.CASA_INFO_KEY, JSON.stringify(data));
           return data;
         }
-      } catch (e) {
-        console.warn('Error al obtener info de la casa de la API:', e);
       }
+    } catch (e) {
+      console.warn('Error al obtener info de la casa de la API:', e);
     }
 
-    const local = localStorage.getItem(this.CASA_INFO_KEY);
-    if (local) {
-      try {
-        const parsed = JSON.parse(local);
-        const fixed = this.fixEncoding(parsed);
-        localStorage.setItem(this.CASA_INFO_KEY, JSON.stringify(fixed));
-        return fixed;
-      } catch (e) {
-        console.error('Error parseando casa-info local:', e);
-      }
-    }
-
-    const defaultInfo = this.getDefaultCasaInfo();
-    localStorage.setItem(this.CASA_INFO_KEY, JSON.stringify(defaultInfo));
-    return defaultInfo;
+    return this.getLocalCasaInfo();
   },
 
-  // Guardar Información de La Casa
   async saveCasaInfo(info) {
     const fixedInfo = this.fixEncoding(info);
     localStorage.setItem(this.CASA_INFO_KEY, JSON.stringify(fixedInfo));
 
-    if (this.isApiAvailable) {
-      try {
-        const res = await fetch('/api/casa-info', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json; charset=utf-8' },
-          body: JSON.stringify(fixedInfo),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          return this.fixEncoding(data.info);
-        }
-      } catch (e) {
-        console.warn('Error al guardar info de la casa en la API:', e);
+    try {
+      const res = await fetch('/api/casa-info', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json; charset=utf-8' },
+        body: JSON.stringify(fixedInfo),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const saved = this.fixEncoding(data.info || fixedInfo);
+        localStorage.setItem(this.CASA_INFO_KEY, JSON.stringify(saved));
+        return saved;
       }
+    } catch (e) {
+      console.warn('Error al guardar info de la casa en la API cloud:', e);
     }
 
     return fixedInfo;
@@ -570,6 +526,15 @@ const StorageService = {
         habitaciones: 1,
         comentarios: 'Buenas Familia!! He creado esta APP para tener un poco de control y organizacion con quien se aloja en la casa de Chipiona, desde aqui podreis hacer reservas, eliminarlas (tened cuidado que podeis eliminar la de otras personas), seleccionar numero de habitaciones que vais a usar, y comentar cosas como voy con un invitado, etc. \n\nCualquier duda que tengais podeis preguntarla por el grupo de la familia, espero que os venga genial la aplicacion y cualquier cosita que querais implementar o modificar comentadselo a Alba.\n\nUn abrazo, Roman.',
         createdAt: '2026-11-02T20:48:21.064Z'
+      },
+      {
+        id: 'res-1793658792196-17qt67',
+        nombre: 'Tio paco',
+        checkIn: '2026-11-03',
+        checkOut: '2027-01-10',
+        habitaciones: 3,
+        comentarios: 'Llegaremos sobre las 4 y nos iremos a las 7',
+        createdAt: '2026-11-02T22:33:12.196Z'
       }
     ];
   }
