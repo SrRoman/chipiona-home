@@ -1,0 +1,215 @@
+/* Estilos personalizados y optimizaciones para Casa Chipiona */
+:root {
+  --color-primary: #0284c7;
+  --color-primary-dark: #0369a1;
+  --color-accent: #f97316;
+  --safe-bottom: env(safe-area-inset-bottom, 16px);
+}
+
+/* Scroll suave y optimización táctil */
+html {
+  -webkit-tap-highlight-color: transparent;
+  scroll-behavior: smooth;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+}
+
+body {
+  touch-action: manipulation;
+}
+
+/* Espacio seguro para la barra de navegación inferior en móviles */
+.pb-safe {
+  padding-bottom: calc(5rem + env(safe-area-inset-bottom, 1rem));
+}
+
+@media (min-width: 768px) {
+  .pb-safe {
+    padding-bottom: 2.5rem;
+  }
+}
+
+.bottom-nav-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0.5rem);
+}
+
+/* Cuadrícula de Calendario Responsive */
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+@media (min-width: 640px) {
+  .calendar-grid {
+    gap: 8px;
+  }
+}
+
+.calendar-day {
+  min-height: 75px;
+  transition: all 0.15s ease-in-out;
+}
+
+@media (min-width: 640px) {
+  .calendar-day {
+    min-height: 100px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .calendar-day {
+    min-height: 125px;
+  }
+}
+
+.calendar-day:active {
+  transform: scale(0.98);
+}
+
+/* Badges de reservas en los días */
+.reserva-tag {
+  font-size: 0.68rem;
+  line-height: 0.95rem;
+  padding: 2.5px 5px;
+  border-radius: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+
+.reserva-tag:hover {
+  transform: translateY(-1px);
+}
+
+/* Flatpickr en Modo Oscuro con Degradado Azul */
+.flatpickr-calendar {
+  background: #0b1528 !important;
+  border: 1px solid #1e2e4a !important;
+  border-radius: 1.25rem !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 25px rgba(2, 132, 199, 0.15) !important;
+  font-family: inherit !important;
+  width: 100% !important;
+  max-width: 330px !important;
+  margin: 0 auto !important;
+  color: #f1f5f9 !important;
+}
+
+.flatpickr-calendar.arrowTop:before,
+.flatpickr-calendar.arrowTop:after {
+  border-bottom-color: #0b1528 !important;
+}
+
+.flatpickr-months {
+  background: transparent !important;
+  padding-top: 8px !important;
+}
+
+.flatpickr-months .flatpickr-month {
+  color: #f8fafc !important;
+  fill: #f8fafc !important;
+}
+
+.flatpickr-current-month .flatpickr-monthDropdown-months,
+.flatpickr-current-month input.cur-year {
+  color: #f8fafc !important;
+  font-weight: 700 !important;
+}
+
+.flatpickr-weekdays {
+  background: transparent !important;
+}
+
+span.flatpickr-weekday {
+  color: #64748b !important;
+  font-weight: 700 !important;
+}
+
+.flatpickr-day {
+  color: #cbd5e1 !important;
+  border-radius: 8px !important;
+  transition: all 0.15s ease !important;
+}
+
+.flatpickr-day:hover {
+  background: #1e293b !important;
+  color: #ffffff !important;
+}
+
+.flatpickr-day.today {
+  border-color: #38bdf8 !important;
+  color: #38bdf8 !important;
+}
+
+.flatpickr-day.selected, 
+.flatpickr-day.startRange, 
+.flatpickr-day.endRange, 
+.flatpickr-day.selected.inRange, 
+.flatpickr-day.startRange.inRange, 
+.flatpickr-day.endRange.inRange {
+  background: #0284c7 !important;
+  border-color: #38bdf8 !important;
+  color: #ffffff !important;
+  font-weight: bold !important;
+  box-shadow: 0 0 12px rgba(2, 132, 199, 0.6) !important;
+}
+
+.flatpickr-day.inRange {
+  background: #0c4a6e !important;
+  border-color: #0c4a6e !important;
+  box-shadow: -5px 0 0 #0c4a6e, 5px 0 0 #0c4a6e !important;
+  color: #e0f2fe !important;
+}
+
+.flatpickr-day.disabled, 
+.flatpickr-day.disabled:hover {
+  color: #334155 !important;
+}
+
+/* Animaciones */
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-up {
+  animation: slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.2s ease-out forwards;
+}
+
+/* Ocultar barra de scroll */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Efectos de vidrio y degradados */
+.glass-panel {
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(56, 189, 248, 0.12);
+}
+
+.glass-panel-hover:hover {
+  border-color: rgba(56, 189, 248, 0.25);
+}

@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Casa Chipiona 🏖️ - Reservas Familiares</title>
+  <meta name="theme-color" content="#06101e">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#f0f9ff',
+              100: '#e0f2fe',
+              500: '#0ea5e9',
+              600: '#0284c7',
+              700: '#0369a1',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Flatpickr (Hotel Range Datepicker) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/es.js"></script>
+
+  <!-- Estilos propios -->
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="bg-gradient-to-br from-[#06101e] via-[#091b34] to-[#040d1a] text-slate-100 min-h-screen antialiased flex flex-col selection:bg-sky-500 selection:text-white">
+
+  <!-- Fondo sutil con destellos de luz oceánica -->
+  <div class="fixed inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(14,165,233,0.15),rgba(255,255,255,0))] pointer-events-none -z-10"></div>
+
+  <!-- ========================================================
+       BARRA SUPERIOR (HEADER) - Adaptada para Móvil y PC Full Width
+  ======================================================== -->
+  <header class="sticky top-0 z-30 bg-[#06101e]/85 backdrop-blur-xl border-b border-sky-950/80 px-4 sm:px-8 py-3.5 shadow-md">
+    <div class="max-w-7xl w-full mx-auto flex items-center justify-between">
+      
+      <!-- Logo y Título -->
+      <div class="flex items-center gap-3 cursor-pointer" onclick="switchTab('inicio')">
+        <div class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-sky-600 via-sky-500 to-cyan-400 text-white flex items-center justify-center text-xl shadow-lg shadow-sky-600/30">
+          🏖️
+        </div>
+        <div>
+          <h1 class="text-base sm:text-lg font-black tracking-tight text-white leading-none">Casa Chipiona</h1>
+          <p class="text-[11px] font-semibold text-sky-400 mt-0.5">Control de Reservas Familiares</p>
+        </div>
+      </div>
+
+      <!-- Navegación de Escritorio (Solo visible en PC) -->
+      <nav id="desktop-nav" class="hidden md:flex items-center gap-1.5 bg-slate-900/80 border border-slate-800 p-1 rounded-2xl shadow-inner">
+        <button data-tab-target="inicio" class="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-sky-500/20 text-sky-300 border border-sky-500/40 transition">
+          🏠 Inicio
+        </button>
+        <button data-tab-target="calendario" class="px-3.5 py-1.5 rounded-xl text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800/60 border border-transparent transition">
+          📅 Calendario
+        </button>
+        <button data-tab-target="lista" class="px-3.5 py-1.5 rounded-xl text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800/60 border border-transparent transition">
+          📋 Todas las Reservas
+        </button>
+        <button data-tab-target="info" class="px-3.5 py-1.5 rounded-xl text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800/60 border border-transparent transition">
+          🏡 La Casa
+        </button>
+      </nav>
+
+      <!-- Botón directo de Reservar -->
+      <button class="btn-open-reserva-modal flex items-center gap-2 bg-gradient-to-r from-sky-500 via-sky-600 to-blue-600 hover:from-sky-400 hover:to-blue-500 active:scale-95 text-white px-4 py-2 rounded-2xl text-xs sm:text-sm font-extrabold shadow-lg shadow-sky-500/25 transition">
+        <span>➕</span>
+        <span>Añadir Reserva</span>
+      </button>
+
+    </div>
+  </header>
+
+  <!-- ========================================================
+       CONTENEDOR PRINCIPAL - Full Width en PC / Cómodo en Móvil
+  ======================================================== -->
+  <main class="flex-1 w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-5 pb-safe space-y-6">
+
+    <!-- ----------------------------------------------------
+         1. VISTA: INICIO (PÁGINA PRINCIPAL)
+    ----------------------------------------------------- -->
+    <section id="view-inicio" class="tab-view space-y-6">
+      
+      <!-- Tarjeta Hero de Bienvenida -->
+      <div class="relative overflow-hidden rounded-3xl bg-gradient-to-br from-sky-700 via-blue-900 to-slate-950 text-white p-6 sm:p-8 shadow-2xl border border-sky-500/20">
+        <div class="absolute -right-8 -bottom-8 w-48 h-48 bg-sky-500/15 rounded-full blur-3xl pointer-events-none"></div>
+        <div class="absolute -left-8 -top-8 w-40 h-40 bg-blue-600/20 rounded-full blur-2xl pointer-events-none"></div>
+        
+        <div class="relative z-10 space-y-4">
+          <div class="inline-flex items-center gap-2 bg-white/10 backdrop-blur-md px-3.5 py-1.5 rounded-full text-xs font-semibold text-sky-200 border border-white/15">
+            <span>🌊</span>
+            <span>Chipiona · Costa de la Luz</span>
+            <span>·</span>
+            <span>3 Habitaciones</span>
+          </div>
+
+          <h2 class="text-2xl sm:text-4xl font-black leading-tight tracking-tight text-white">
+            Nuestra casa familiar <br class="hidden sm:block" />junto a la playa
+          </h2>
+          
+          <p class="text-xs sm:text-sm text-sky-100/90 leading-relaxed max-w-2xl">
+            Consulta los días libres, planifica tus vacaciones familiares y reserva tus habitaciones de forma rápida sin confusiones en el grupo de WhatsApp.
+          </p>
+
+          <!-- 2 BOTONES PRINCIPALES DE ACCIÓN -->
+          <div class="grid grid-cols-2 sm:flex sm:items-center gap-3 pt-3">
+            <button id="btn-ir-calendario" class="flex items-center justify-center gap-2 bg-white/95 hover:bg-white text-slate-900 font-extrabold py-3.5 px-6 rounded-2xl text-xs sm:text-sm shadow-xl hover:shadow-sky-500/20 active:scale-95 transition">
+              <span class="text-base sm:text-lg">📅</span>
+              <span>Ver Calendario</span>
+            </button>
+            <button class="btn-open-reserva-modal flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-400 hover:to-orange-500 text-white font-extrabold py-3.5 px-6 rounded-2xl text-xs sm:text-sm shadow-xl shadow-amber-500/20 active:scale-95 transition">
+              <span class="text-base sm:text-lg">➕</span>
+              <span>Añadir Reserva</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Estado actual de la casa (¿Quién está hoy?) -->
+      <div id="inicio-estado-casa">
+        <!-- Renderizado dinámico desde JS -->
+      </div>
+
+      <!-- Próximas Estancias Familiares -->
+      <div class="space-y-3">
+        <div class="flex items-center justify-between px-1">
+          <h3 class="text-base font-extrabold text-white flex items-center gap-2">
+            <span>🗓️</span> Próximas reservas familiares
+          </h3>
+          <button onclick="switchTab('calendario')" class="text-xs font-bold text-sky-400 hover:text-sky-300">
+            Ver mes completo →
+          </button>
+        </div>
+
+        <!-- Lista de reservas (en PC se muestran en cuadrícula de 2 columnas) -->
+        <div id="inicio-proximas-reservas" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <!-- Renderizado dinámico desde JS -->
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ----------------------------------------------------
+         2. VISTA: CALENDARIO (AMPLIO EN PC Y MÓVIL)
+    ----------------------------------------------------- -->
+    <section id="view-calendario" class="tab-view hidden space-y-4">
+      
+      <!-- Cabecera y Contenedor del Calendario -->
+      <div class="bg-slate-900/85 rounded-3xl p-4 sm:p-7 border border-slate-800 shadow-2xl space-y-4 backdrop-blur-md">
+        
+        <!-- Controles de Mes -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+          <div>
+            <h2 id="calendar-month-title" class="text-xl sm:text-2xl font-black text-white">Mes Año</h2>
+            <p class="text-xs text-slate-400 mt-0.5">Toca cualquier día para consultar detalles o hacer tu reserva</p>
+          </div>
+          <div class="flex items-center gap-2 self-end sm:self-auto">
+            <button id="btn-today-month" class="px-3 py-1.5 text-xs font-extrabold text-sky-300 bg-sky-950/70 hover:bg-sky-900/60 border border-sky-800/60 rounded-xl transition">
+              Hoy
+            </button>
+            <button id="btn-prev-month" class="w-9 h-9 flex items-center justify-center rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 active:scale-95 transition text-base font-bold">
+              ‹
+            </button>
+            <button id="btn-next-month" class="w-9 h-9 flex items-center justify-center rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 active:scale-95 transition text-base font-bold">
+              ›
+            </button>
+          </div>
+        </div>
+
+        <!-- Leyenda de colores -->
+        <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-300 bg-slate-950/50 p-3 rounded-2xl border border-slate-800/80">
+          <div class="flex items-center gap-2">
+            <span class="w-3 h-3 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50"></span>
+            <span class="font-medium">Libre</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="w-3 h-3 rounded-full bg-amber-500 shadow-sm shadow-amber-500/50"></span>
+            <span class="font-medium">1 o 2 habitaciones ocupadas</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="w-3 h-3 rounded-full bg-rose-500 shadow-sm shadow-rose-500/50"></span>
+            <span class="font-medium">Completa (3 habitaciones)</span>
+          </div>
+        </div>
+
+        <!-- Días de la semana -->
+        <div class="grid grid-cols-7 gap-1 sm:gap-2 text-center font-bold text-xs sm:text-sm text-slate-400 py-1">
+          <div>Lun</div>
+          <div>Mar</div>
+          <div>Mié</div>
+          <div>Jue</div>
+          <div>Vie</div>
+          <div class="text-sky-400 font-extrabold">Sáb</div>
+          <div class="text-sky-400 font-extrabold">Dom</div>
+        </div>
+
+        <!-- Cuadrícula interactiva de días -->
+        <div id="calendar-days-grid" class="calendar-grid">
+          <!-- Renderizado dinámico desde JS -->
+        </div>
+      </div>
+
+      <!-- Botón de acción rápida inferior -->
+      <div class="flex justify-center pt-2">
+        <button class="btn-open-reserva-modal px-8 py-4 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white rounded-2xl font-extrabold text-sm shadow-xl shadow-sky-600/30 flex items-center justify-center gap-2 active:scale-95 transition">
+          <span>➕</span>
+          <span>Añadir Reserva para estas fechas</span>
+        </button>
+      </div>
+
+    </section>
+
+    <!-- ----------------------------------------------------
+         3. VISTA: TODAS LAS RESERVAS (LISTADO RESPONSIVO)
+    ----------------------------------------------------- -->
+    <section id="view-lista" class="tab-view hidden space-y-4">
+      <div class="flex items-center justify-between pb-2 border-b border-slate-800">
+        <div>
+          <h2 class="text-xl sm:text-2xl font-black text-white">Todas las Reservas</h2>
+          <p class="text-xs text-slate-400">Historial completo y próximas estancias familiares</p>
+        </div>
+        <button class="btn-open-reserva-modal px-4 py-2 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 text-white font-extrabold text-xs rounded-xl shadow-md transition">
+          ➕ Nueva Reserva
+        </button>
+      </div>
+
+      <!-- Cuadrícula de tarjetas de reservas -->
+      <div id="lista-todas-reservas" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <!-- Renderizado dinámico desde JS -->
+      </div>
+    </section>
+
+    <!-- ----------------------------------------------------
+         4. VISTA: GUÍA DE LA CASA (INFO Y NORMAS EDITABLES)
+    ----------------------------------------------------- -->
+    <section id="view-info" class="tab-view hidden space-y-5">
+      
+      <!-- Cabecera con Botón de Editar Lápiz -->
+      <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+        <div>
+          <h2 class="text-xl sm:text-2xl font-black text-white">Guía y Normas de Casa Chipiona 🏡</h2>
+          <p class="text-xs text-slate-400">Información para cuidar la casa entre toda la familia</p>
+        </div>
+        <!-- Botón Lápiz para Editar Normas -->
+        <button class="btn-open-edit-casa flex items-center gap-2 px-4 py-2 rounded-2xl bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 text-white text-xs sm:text-sm font-extrabold shadow-lg shadow-sky-600/30 transition active:scale-95">
+          <span>✏️</span>
+          <span>Editar Normas</span>
+        </button>
+      </div>
+
+      <!-- Tarjetas de Información Editables -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+        
+        <!-- Tarjeta 1: Habitaciones -->
+        <div class="relative p-6 bg-slate-900/80 rounded-3xl border border-sky-900/40 shadow-xl space-y-3 backdrop-blur-md group">
+          <!-- Botón Lápiz en la esquina -->
+          <button class="btn-open-edit-casa absolute top-4 right-4 text-slate-400 hover:text-sky-300 p-2 rounded-xl bg-slate-800/60 hover:bg-slate-800 border border-slate-700 transition"
+                  data-target-section="habitaciones" title="Editar distribución de habitaciones">
+            ✏️
+          </button>
+          
+          <div class="w-12 h-12 rounded-2xl bg-sky-950 text-sky-400 border border-sky-800 flex items-center justify-center text-2xl font-bold">
+            🛏️
+          </div>
+          <h4 class="font-extrabold text-white text-base">
+            Distribución de Habitaciones (3)
+          </h4>
+          <ul id="casa-info-habitaciones" class="space-y-2 text-xs text-slate-300">
+            <!-- Renderizado dinámico desde JS -->
+          </ul>
+        </div>
+
+        <!-- Tarjeta 2: Normas de salida -->
+        <div class="relative p-6 bg-slate-900/80 rounded-3xl border border-amber-900/40 shadow-xl space-y-3 backdrop-blur-md group">
+          <!-- Botón Lápiz en la esquina -->
+          <button class="btn-open-edit-casa absolute top-4 right-4 text-slate-400 hover:text-amber-300 p-2 rounded-xl bg-slate-800/60 hover:bg-slate-800 border border-slate-700 transition"
+                  data-target-section="normas" title="Editar normas de salida">
+            ✏️
+          </button>
+
+          <div class="w-12 h-12 rounded-2xl bg-amber-950 text-amber-400 border border-amber-800 flex items-center justify-center text-2xl font-bold">
+            🧹
+          </div>
+          <h4 class="font-extrabold text-white text-base">
+            Normas al salir de la casa
+          </h4>
+          <ul id="casa-info-normas" class="space-y-2 text-xs text-slate-300">
+            <!-- Renderizado dinámico desde JS -->
+          </ul>
+        </div>
+
+        <!-- Tarjeta 3: Consejos y Chipiona -->
+        <div class="relative p-6 bg-slate-900/80 rounded-3xl border border-cyan-900/40 shadow-xl space-y-3 backdrop-blur-md group">
+          <!-- Botón Lápiz en la esquina -->
+          <button class="btn-open-edit-casa absolute top-4 right-4 text-slate-400 hover:text-cyan-300 p-2 rounded-xl bg-slate-800/60 hover:bg-slate-800 border border-slate-700 transition"
+                  data-target-section="consejos" title="Editar consejos y recomendaciones">
+            ✏️
+          </button>
+
+          <div class="w-12 h-12 rounded-2xl bg-cyan-950 text-cyan-400 border border-cyan-800 flex items-center justify-center text-2xl font-bold">
+            🌊
+          </div>
+          <h4 class="font-extrabold text-white text-base">
+            Disfrutar de Chipiona
+          </h4>
+          <div id="casa-info-consejos" class="text-xs text-slate-300 space-y-2">
+            <!-- Renderizado dinámico desde JS -->
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ========================================================
+       BARRA DE NAVEGACIÓN INFERIOR (Solo en móvil, oculta en PC)
+  ======================================================== -->
+  <nav class="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-[#06101e]/95 backdrop-blur-xl border-t border-sky-950 px-2 py-1.5 bottom-nav-safe shadow-2xl">
+    <div class="max-w-md mx-auto grid grid-cols-5 items-center text-center">
+      
+      <!-- Botón Inicio -->
+      <button data-tab-target="inicio" class="flex flex-col items-center justify-center py-1 text-sky-400 transition">
+        <span class="tab-icon text-xl transition-transform">🏠</span>
+        <span class="tab-label text-[10px] font-bold text-sky-300 mt-0.5">Inicio</span>
+      </button>
+
+      <!-- Botón Calendario -->
+      <button data-tab-target="calendario" class="flex flex-col items-center justify-center py-1 text-slate-400 transition">
+        <span class="tab-icon text-xl transition-transform">📅</span>
+        <span class="tab-label text-[10px] font-medium mt-0.5">Calendario</span>
+      </button>
+
+      <!-- Botón CENTRAL: Añadir Reserva -->
+      <div class="flex items-center justify-center -mt-5">
+        <button class="btn-open-reserva-modal w-12 h-12 rounded-full bg-gradient-to-tr from-sky-500 via-sky-600 to-blue-600 text-white flex items-center justify-center shadow-lg shadow-sky-600/40 active:scale-90 hover:scale-105 transition">
+          <span class="text-2xl font-light leading-none">＋</span>
+        </button>
+      </div>
+
+      <!-- Botón Lista de Reservas -->
+      <button data-tab-target="lista" class="flex flex-col items-center justify-center py-1 text-slate-400 transition">
+        <span class="tab-icon text-xl transition-transform">📋</span>
+        <span class="tab-label text-[10px] font-medium mt-0.5">Reservas</span>
+      </button>
+
+      <!-- Botón Info / Guía -->
+      <button data-tab-target="info" class="flex flex-col items-center justify-center py-1 text-slate-400 transition">
+        <span class="tab-icon text-xl transition-transform">🏡</span>
+        <span class="tab-label text-[10px] font-medium mt-0.5">La Casa</span>
+      </button>
+
+    </div>
+  </nav>
+
+  <!-- ========================================================
+       MODAL 1: AÑADIR NUEVA RESERVA (ESTILO HOTEL OSCURO)
+  ======================================================== -->
+  <div id="modal-reserva" class="modal-overlay hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
+    <div class="bg-slate-900 border border-slate-700 w-full max-w-lg rounded-t-3xl sm:rounded-3xl max-h-[90vh] overflow-y-auto no-scrollbar shadow-2xl p-5 sm:p-7 animate-slide-up space-y-4">
+      
+      <!-- Cabecera del Modal -->
+      <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+        <div class="flex items-center gap-2.5">
+          <span class="text-2xl">🏖️</span>
+          <div>
+            <h3 class="font-black text-white text-base sm:text-lg">Añadir Reserva Familiar</h3>
+            <p class="text-xs text-slate-400">Selecciona fechas y habitaciones a utilizar</p>
+          </div>
+        </div>
+        <button class="btn-close-modal w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center text-sm font-bold transition">
+          ✕
+        </button>
+      </div>
+
+      <!-- Formulario -->
+      <form id="form-nueva-reserva" class="space-y-4">
+
+        <!-- 1. FECHAS ESTILO HOTEL -->
+        <div class="space-y-1.5">
+          <label class="block text-xs font-bold text-sky-400 uppercase tracking-wider">
+            📅 Fechas de Entrada y Salida
+          </label>
+          <div class="relative">
+            <input type="text" id="fechas-estancia" readonly placeholder="Toca aquí para seleccionar fechas en el calendario..."
+                   class="w-full bg-slate-950/80 border border-slate-700 rounded-2xl p-3.5 text-xs sm:text-sm font-bold text-white cursor-pointer focus:outline-none focus:ring-2 focus:ring-sky-500 transition shadow-inner" />
+            <span class="absolute right-4 top-3.5 text-slate-400 pointer-events-none text-base">📆</span>
+          </div>
+          <input type="hidden" id="reserva-checkin" name="checkIn" />
+          <input type="hidden" id="reserva-checkout" name="checkOut" />
+
+          <div id="resumen-noches" class="hidden"></div>
+          <div id="aviso-disponibilidad" class="hidden"></div>
+        </div>
+
+        <!-- 2. NOMBRE DE QUIEN RESERVA -->
+        <div class="space-y-1.5">
+          <label class="block text-xs font-bold text-sky-400 uppercase tracking-wider">
+            👤 Nombre de la persona o familia
+          </label>
+          <input type="text" id="reserva-nombre" required placeholder="Ej: Tía Carmen, Primo Alejandro..."
+                 class="w-full bg-slate-950/80 border border-slate-700 rounded-2xl p-3.5 text-xs sm:text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-sky-500 transition shadow-inner placeholder-slate-500" />
+        </div>
+
+        <!-- 3. NÚMERO DE HABITACIONES (1, 2 O 3) -->
+        <div class="space-y-1.5">
+          <div class="flex items-center justify-between">
+            <label class="block text-xs font-bold text-sky-400 uppercase tracking-wider">
+              🛏️ Habitaciones a usar (máx. 3)
+            </label>
+            <span class="text-[11px] text-slate-400">Total casa: 3 hab</span>
+          </div>
+
+          <input type="hidden" id="reserva-habitaciones" value="1" />
+
+          <!-- Botones táctiles -->
+          <div class="grid grid-cols-3 gap-2">
+            <button type="button" data-hab="1" class="habitacion-btn active py-3 px-2 rounded-2xl border text-center transition flex flex-col items-center">
+              <span class="text-base mb-1">🛏️</span>
+              <span class="text-xs font-bold">1 Habitación</span>
+            </button>
+            <button type="button" data-hab="2" class="habitacion-btn py-3 px-2 rounded-2xl border border-slate-700 text-slate-300 bg-slate-800/60 text-center transition flex flex-col items-center">
+              <span class="text-base mb-1">🛏️🛏️</span>
+              <span class="text-xs font-bold">2 Habitaciones</span>
+            </button>
+            <button type="button" data-hab="3" class="habitacion-btn py-3 px-2 rounded-2xl border border-slate-700 text-slate-300 bg-slate-800/60 text-center transition flex flex-col items-center">
+              <span class="text-base mb-1">🏠</span>
+              <span class="text-xs font-bold">3 (Toda la casa)</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 4. COMENTARIOS -->
+        <div class="space-y-1.5">
+          <label class="block text-xs font-bold text-sky-400 uppercase tracking-wider">
+            💬 Comentarios o notas familiares
+          </label>
+          <textarea id="reserva-comentarios" rows="3" placeholder="Ej: Llegamos el viernes a las 19:00, llevamos sábanas, seremos 4 personas..."
+                    class="w-full bg-slate-950/80 border border-slate-700 rounded-2xl p-3 text-xs sm:text-sm text-white focus:outline-none focus:ring-2 focus:ring-sky-500 transition shadow-inner placeholder-slate-500"></textarea>
+        </div>
+
+        <!-- BOTÓN DE CONFIRMACIÓN -->
+        <div class="pt-2">
+          <button type="submit" id="btn-submit-reserva"
+                  class="w-full py-4 bg-gradient-to-r from-sky-500 via-sky-600 to-blue-600 hover:from-sky-400 hover:to-blue-500 active:scale-[0.98] text-white rounded-2xl font-extrabold text-sm shadow-xl shadow-sky-600/30 transition flex items-center justify-center gap-2">
+            <span>Confirmar Reserva Familiar 🏖️</span>
+          </button>
+        </div>
+
+      </form>
+
+    </div>
+  </div>
+
+  <!-- ========================================================
+       MODAL 2: DETALLES DE LA RESERVA Y CANCELACIÓN
+  ======================================================== -->
+  <div id="modal-detalle" class="modal-overlay hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
+    <div class="bg-slate-900 border border-slate-700 w-full max-w-lg rounded-t-3xl sm:rounded-3xl shadow-2xl p-5 sm:p-7 animate-slide-up space-y-4 text-white">
+      
+      <!-- Cabecera Detalle -->
+      <div class="flex items-start justify-between pb-3 border-b border-slate-800">
+        <div class="flex items-center gap-3.5">
+          <div id="detalle-avatar"></div>
+          <div>
+            <h3 id="detalle-nombre" class="font-black text-white text-lg sm:text-xl leading-tight">Nombre</h3>
+            <span id="detalle-habitaciones-badge" class="inline-block mt-1 text-xs font-bold px-2.5 py-0.5 rounded-full bg-sky-950 text-sky-300 border border-sky-800">
+              Habitaciones
+            </span>
+          </div>
+        </div>
+        <button class="btn-close-modal w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center text-sm font-bold transition">
+          ✕
+        </button>
+      </div>
+
+      <!-- Tarjeta Fechas Estancia -->
+      <div class="bg-slate-950/80 p-4 rounded-2xl border border-slate-800 space-y-3">
+        <div class="grid grid-cols-2 gap-3 text-xs">
+          <div>
+            <span class="text-slate-400 font-bold block uppercase text-[10px]">Entrada</span>
+            <p id="detalle-checkin" class="font-extrabold text-white text-sm mt-0.5">Fecha in</p>
+          </div>
+          <div>
+            <span class="text-slate-400 font-bold block uppercase text-[10px]">Salida</span>
+            <p id="detalle-checkout" class="font-extrabold text-white text-sm mt-0.5">Fecha out</p>
+          </div>
+        </div>
+        <div class="pt-2 border-t border-slate-800 flex items-center justify-between text-xs">
+          <span class="text-slate-400">Duración estancia:</span>
+          <span id="detalle-noches" class="font-extrabold text-sky-300 bg-sky-950/80 px-2.5 py-1 rounded-lg border border-sky-800/80">X noches</span>
+        </div>
+      </div>
+
+      <!-- Comentarios -->
+      <div id="detalle-comentarios-box" class="space-y-1.5">
+        <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Comentarios / Notas:</span>
+        <div class="bg-slate-950/60 border border-slate-800 p-3.5 rounded-2xl text-xs text-slate-300 italic">
+          "<span id="detalle-comentarios"></span>"
+        </div>
+      </div>
+
+      <!-- Botón de Cancelar Reserva -->
+      <div class="pt-2 space-y-2">
+        <button id="btn-cancelar-reserva"
+                class="w-full py-3.5 bg-rose-950/40 hover:bg-rose-900/40 active:scale-[0.98] text-rose-300 border border-rose-800/80 rounded-2xl font-bold text-xs sm:text-sm transition flex items-center justify-center gap-2">
+          <span>🗑️</span>
+          <span>Cancelar esta reserva</span>
+        </button>
+        <p class="text-center text-[10px] text-slate-400">
+          Si cancelas, las fechas y habitaciones volverán a estar disponibles inmediatamente para toda la familia.
+        </p>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ========================================================
+       MODAL 3: MÚLTIPLES RESERVAS EN EL MISMO DÍA
+  ======================================================== -->
+  <div id="modal-multiples" class="modal-overlay hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
+    <div class="bg-slate-900 border border-slate-700 w-full max-w-lg rounded-t-3xl sm:rounded-3xl shadow-2xl p-5 sm:p-6 animate-slide-up space-y-3 text-white">
+      <div class="flex items-center justify-between pb-2 border-b border-slate-800">
+        <div>
+          <h3 class="font-black text-white text-base">Reservas en esta fecha</h3>
+          <p id="multiples-fecha-title" class="text-xs text-slate-400">Fecha</p>
+        </div>
+        <button class="btn-close-modal w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center text-sm font-bold transition">
+          ✕
+        </button>
+      </div>
+
+      <div id="multiples-reservas-list" class="space-y-2">
+        <!-- Renderizado dinámico desde JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================
+       MODAL 4: EDITAR INFORMACIÓN Y NORMAS DE LA CASA (CON LÁPIZ)
+  ======================================================== -->
+  <div id="modal-editar-casa" class="modal-overlay hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
+    <div class="bg-slate-900 border border-slate-700 w-full max-w-2xl rounded-t-3xl sm:rounded-3xl max-h-[90vh] overflow-y-auto no-scrollbar shadow-2xl p-5 sm:p-7 animate-slide-up space-y-5 text-white">
+      
+      <!-- Cabecera del Modal de Edición -->
+      <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+        <div class="flex items-center gap-3">
+          <span class="text-2xl">✏️</span>
+          <div>
+            <h3 class="font-black text-white text-base sm:text-lg">Editar Información y Normas de La Casa</h3>
+            <p class="text-xs text-slate-400">Modifica las normas, habitaciones o notas para que toda la familia lo vea</p>
+          </div>
+        </div>
+        <button class="btn-close-modal w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center text-sm font-bold transition">
+          ✕
+        </button>
+      </div>
+
+      <form id="form-editar-casa" class="space-y-4">
+        
+        <!-- Campo 1: Habitaciones -->
+        <div class="space-y-1.5">
+          <label class="block text-xs font-bold text-sky-400 uppercase tracking-wider flex items-center gap-1.5">
+            <span>🛏️</span>
+            <span>Distribución de Habitaciones (Escribe cada línea con un punto o guión)</span>
+          </label>
+          <textarea id="edit-casa-habitaciones" rows="3" required
+                    class="w-full bg-slate-950/80 border border-slate-700 rounded-2xl p-3 text-xs sm:text-sm text-white focus:outline-none focus:ring-2 focus:ring-sky-500 transition shadow-inner font-mono"></textarea>
+        </div>
+
+        <!-- Campo 2: Normas de salida -->
+        <div class="space-y-1.5">
+          <label class="block text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+            <span>🧹</span>
+            <span>Normas al salir de la casa</span>
+          </label>
+          <textarea id="edit-casa-normas" rows="4" required
+                    class="w-full bg-slate-950/80 border border-slate-700 rounded-2xl p-3 text-xs sm:text-sm text-white focus:outline-none focus:ring-2 focus:ring-sky-500 transition shadow-inner font-mono"></textarea>
+        </div>
+
+        <!-- Campo 3: Consejos y notas -->
+        <div class="space-y-1.5">
+          <label class="block text-xs font-bold text-cyan-400 uppercase tracking-wider flex items-center gap-1.5">
+            <span>🌊</span>
+            <span>Consejos y Notas de Chipiona</span>
+          </label>
+          <textarea id="edit-casa-consejos" rows="3" required
+                    class="w-full bg-slate-950/80 border border-slate-700 rounded-2xl p-3 text-xs sm:text-sm text-white focus:outline-none focus:ring-2 focus:ring-sky-500 transition shadow-inner font-mono"></textarea>
+        </div>
+
+        <!-- Botones de Acción -->
+        <div class="pt-3 flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-slate-800">
+          <button type="button" id="btn-reset-casa-info"
+                  class="w-full sm:w-auto px-4 py-2.5 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition">
+            🔄 Restablecer por defecto
+          </button>
+          
+          <div class="flex items-center gap-2 w-full sm:w-auto">
+            <button type="button" class="btn-close-modal w-full sm:w-auto px-4 py-2.5 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 transition">
+              Cancelar
+            </button>
+            <button type="submit" id="btn-submit-edit-casa"
+                    class="w-full sm:w-auto px-6 py-2.5 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 text-white rounded-xl text-xs sm:text-sm font-extrabold shadow-lg shadow-sky-600/30 transition active:scale-95">
+              Guardar Cambios 💾
+            </button>
+          </div>
+        </div>
+
+      </form>
+
+    </div>
+  </div>
+
+  <!-- ========================================================
+       CONTENEDOR DE NOTIFICACIONES TOAST
+  ======================================================== -->
+  <div id="toast-container" class="fixed top-4 left-4 right-4 z-50 flex flex-col items-center gap-2 pointer-events-none max-w-md mx-auto"></div>
+
+  <!-- Scripts -->
+  <script src="js/storage.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

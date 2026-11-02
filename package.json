@@ -1,0 +1,17 @@
+{
+  "name": "web-chipiona-reservas",
+  "version": "1.0.0",
+  "description": "Aplicación web móvil para la gestión de reservas de la casa familiar en Chipiona",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": ["chipiona", "reservas", "familia", "calendario"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.19.2",
+    "cors": "^2.8.5"
+  }
+}
