@@ -233,3 +233,13 @@ span.flatpickr-weekday {
 .animate-fade-out {
   animation: fadeOut 0.25s ease-in forwards;
 }
+
+/* Asegurar que .hidden siempre prevalezca y oculte el elemento */
+.hidden {
+  display: none !important;
+}
+
+.modal-overlay.hidden {
+  display: none !important;
+}
+

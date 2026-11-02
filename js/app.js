@@ -36,42 +36,78 @@ function getColorForName(name) {
   return FAMILY_COLORS[index];
 }
 
-// Inicialización de la aplicación al cargar el DOM
-document.addEventListener('DOMContentLoaded', async () => {
-  // 1. SEGURIDAD INMEDIATA (sin esperar a peticiones de red)
-  setupPINAuth();
-  checkAuthPIN();
+// Inicialización no bloqueante y ultra-rápida de la aplicación
+function initApp() {
+  console.log('🏖️ Iniciando Casa Chipiona Web...');
 
-  // 2. Inicializar servicio de almacenamiento (detecta servidor o localstorage)
+  // 1. PIN de seguridad
   try {
+    setupPINAuth();
+    checkAuthPIN();
+  } catch(e) {}
+
+  // 2. Carga inmediata síncrona desde LocalStorage (interfaz instantánea en 0ms)
+  try {
+    if (typeof StorageService !== 'undefined') {
+      AppState.reservas = StorageService.getLocalReservas();
+      AppState.reservas.sort((a, b) => new Date(a.checkIn) - new Date(b.checkIn));
+      AppState.casaInfo = StorageService.getLocalCasaInfo();
+    }
+  } catch (err) {
+    console.warn('Carga síncrona local:', err);
+  }
+
+  // 3. Configurar TODOS los botones y escuchadores de eventos DE INMEDIATO
+  try {
+    setupEventListeners();
+  } catch (err) {
+    console.error('Error al configurar botones:', err);
+  }
+
+  // 4. Inicializar selector de fechas Flatpickr de forma segura
+  try {
+    initDatepicker();
+  } catch (err) {
+    console.warn('Error en Flatpickr:', err);
+  }
+
+  // 5. Renderizar todas las vistas inmediatamente con datos locales
+  try {
+    renderInicio();
+    renderCalendar();
+    renderLista();
+    renderCasaInfo();
+    updateNavigationTabs('inicio');
+  } catch (err) {
+    console.error('Error renderizando vistas iniciales:', err);
+  }
+
+  // 6. En segundo plano: sincronizar con servidor si está disponible
+  syncBackendInBackground();
+}
+
+async function syncBackendInBackground() {
+  try {
+    if (typeof StorageService === 'undefined') return;
     await StorageService.init();
-  } catch (err) {
-    console.warn('StorageService.init fallback:', err);
+    if (StorageService.isApiAvailable) {
+      await Promise.all([loadReservas(), loadCasaInfo()]);
+      renderInicio();
+      renderCalendar();
+      renderLista();
+      renderCasaInfo();
+    }
+  } catch (e) {
+    console.log('Sincronización en segundo plano lista');
   }
+}
 
-  // 3. Cargar reservas e información de la casa
-  try {
-    await Promise.all([
-      loadReservas(),
-      loadCasaInfo()
-    ]);
-  } catch (err) {
-    console.warn('Carga de datos fallback:', err);
-  }
-
-  // 4. Configurar Datepicker de hotel (Flatpickr)
-  initDatepicker();
-
-  // 5. Configurar escuchadores de eventos
-  setupEventListeners();
-
-  // 6. Renderizar vistas iniciales
-  renderInicio();
-  renderCalendar();
-  renderLista();
-  renderCasaInfo();
-  updateNavigationTabs('inicio');
-});
+// Ejecutar inmediatamente si el DOM ya está listo, o escuchar DOMContentLoaded
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initApp);
+} else {
+  initApp();
+}
 
 // Cargar reservas desde el servicio
 async function loadReservas() {
@@ -99,7 +135,13 @@ function initDatepicker() {
   const dateInput = document.getElementById('fechas-estancia');
   if (!dateInput) return;
 
-  AppState.flatpickrInstance = flatpickr(dateInput, {
+  if (typeof flatpickr !== 'function') {
+    console.warn('Flatpickr aún no está cargado');
+    return;
+  }
+
+  try {
+    AppState.flatpickrInstance = flatpickr(dateInput, {
     mode: 'range',
     minDate: 'today',
     dateFormat: 'Y-m-d',
@@ -166,6 +208,9 @@ function initDatepicker() {
       }
     }
   });
+  } catch (e) {
+    console.warn('Error inicializando flatpickr:', e);
+  }
 }
 
 // Comprobación de disponibilidad preliminar en el formulario
@@ -331,15 +376,18 @@ function setupEventListeners() {
 
 // Cambio de pestaña
 function switchTab(tabName) {
+  if (!tabName) return;
   AppState.activeTab = tabName;
 
   document.querySelectorAll('.tab-view').forEach((view) => {
     view.classList.add('hidden');
+    view.style.display = 'none';
   });
 
   const activeView = document.getElementById(`view-${tabName}`);
   if (activeView) {
     activeView.classList.remove('hidden');
+    activeView.style.display = 'block';
   }
 
   updateNavigationTabs(tabName);
@@ -355,6 +403,30 @@ function switchTab(tabName) {
   }
 
   window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// Selector de habitaciones interactivo
+function selectHabitaciones(num) {
+  AppState.selectedHabitaciones = parseInt(num, 10) || 1;
+  const input = document.getElementById('reserva-habitaciones');
+  if (input) input.value = AppState.selectedHabitaciones;
+
+  document.querySelectorAll('.habitacion-btn').forEach((b) => {
+    const val = parseInt(b.getAttribute('data-hab'), 10);
+    if (val === AppState.selectedHabitaciones) {
+      b.classList.add('active', 'border-sky-500', 'bg-sky-500/20', 'text-sky-300', 'font-bold');
+      b.classList.remove('border-slate-700', 'text-slate-300', 'bg-slate-800/60');
+    } else {
+      b.classList.remove('active', 'border-sky-500', 'bg-sky-500/20', 'text-sky-300', 'font-bold');
+      b.classList.add('border-slate-700', 'text-slate-300', 'bg-slate-800/60');
+    }
+  });
+
+  const inVal = document.getElementById('reserva-checkin')?.value;
+  const outVal = document.getElementById('reserva-checkout')?.value;
+  if (inVal && outVal) {
+    checkPreviewAvailability(inVal, outVal, AppState.selectedHabitaciones);
+  }
 }
 
 // Sincronizar estilos activos en la barra móvil y la barra de escritorio
@@ -749,6 +821,7 @@ function openModalEditarCasa(targetSection = null) {
   if (inputConsejos) inputConsejos.value = info.consejos || '';
 
   modal.classList.remove('hidden');
+  modal.style.display = 'flex';
   document.body.classList.add('overflow-hidden');
 
   // Si se abrió desde una tarjeta específica, hacer foco en ella
@@ -825,6 +898,10 @@ function openModalReserva(prefillDate = null) {
     }
   });
 
+  if (!AppState.flatpickrInstance) {
+    initDatepicker();
+  }
+
   if (AppState.flatpickrInstance) {
     AppState.flatpickrInstance.clear();
     if (prefillDate) {
@@ -836,6 +913,7 @@ function openModalReserva(prefillDate = null) {
   }
 
   modal.classList.remove('hidden');
+  modal.style.display = 'flex';
   document.body.classList.add('overflow-hidden');
 }
 
@@ -918,6 +996,7 @@ function openModalDetalle(reservaId) {
   }
 
   modal.classList.remove('hidden');
+  modal.style.display = 'flex';
   document.body.classList.add('overflow-hidden');
 }
 
@@ -947,6 +1026,7 @@ function openModalMultiplesReservas(dateStr, reservas) {
   }).join('');
 
   modal.classList.remove('hidden');
+  modal.style.display = 'flex';
   document.body.classList.add('overflow-hidden');
 }
 
@@ -978,6 +1058,7 @@ async function handleCancelarReserva() {
 function closeAllModals() {
   document.querySelectorAll('.modal-overlay').forEach((m) => {
     m.classList.add('hidden');
+    m.style.display = 'none';
   });
   document.body.classList.remove('overflow-hidden');
 }
@@ -1097,7 +1178,9 @@ function setupPINAuth() {
 window.openModalReserva = openModalReserva;
 window.openModalDetalle = openModalDetalle;
 window.openModalEditarCasa = openModalEditarCasa;
+window.openModalMultiplesReservas = openModalMultiplesReservas;
 window.closeAllModals = closeAllModals;
 window.switchTab = switchTab;
+window.selectHabitaciones = selectHabitaciones;
 window.checkAuthPIN = checkAuthPIN;
 window.validarPIN = validarPIN;

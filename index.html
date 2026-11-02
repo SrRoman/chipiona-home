@@ -34,7 +34,7 @@
   <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/es.js"></script>
 
   <!-- Estilos propios con cache buster -->
-  <link rel="stylesheet" href="css/styles.css?v=5.0">
+  <link rel="stylesheet" href="css/styles.css?v=6.0">
 
   <style>
     /* Ocultación total e instantánea si ya está autenticado */
@@ -310,16 +310,16 @@
 
       <!-- Navegación de Escritorio (Solo visible en PC) -->
       <nav id="desktop-nav" class="hidden md:flex items-center gap-1.5 bg-slate-900/80 border border-slate-800 p-1 rounded-2xl shadow-inner">
-        <button data-tab-target="inicio" class="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-sky-500/20 text-sky-300 border border-sky-500/40 transition">
+        <button data-tab-target="inicio" onclick="switchTab('inicio')" class="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-sky-500/20 text-sky-300 border border-sky-500/40 transition">
           🏠 Inicio
         </button>
-        <button data-tab-target="calendario" class="px-3.5 py-1.5 rounded-xl text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800/60 border border-transparent transition">
+        <button data-tab-target="calendario" onclick="switchTab('calendario')" class="px-3.5 py-1.5 rounded-xl text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800/60 border border-transparent transition">
           📅 Calendario
         </button>
-        <button data-tab-target="lista" class="px-3.5 py-1.5 rounded-xl text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800/60 border border-transparent transition">
+        <button data-tab-target="lista" onclick="switchTab('lista')" class="px-3.5 py-1.5 rounded-xl text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800/60 border border-transparent transition">
           📋 Todas las Reservas
         </button>
-        <button data-tab-target="info" class="px-3.5 py-1.5 rounded-xl text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800/60 border border-transparent transition">
+        <button data-tab-target="info" onclick="switchTab('info')" class="px-3.5 py-1.5 rounded-xl text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800/60 border border-transparent transition">
           🏡 La Casa
         </button>
       </nav>
@@ -329,7 +329,7 @@
         <button id="btn-lock-session" class="p-2 rounded-2xl bg-slate-800/60 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/80 transition" title="Bloquear / Cerrar Sesión">
           🔒
         </button>
-        <button class="btn-open-reserva-modal flex items-center gap-2 bg-gradient-to-r from-sky-500 via-sky-600 to-blue-600 hover:from-sky-400 hover:to-blue-500 active:scale-95 text-white px-4 py-2 rounded-2xl text-xs sm:text-sm font-extrabold shadow-lg shadow-sky-500/25 transition">
+        <button onclick="openModalReserva()" class="btn-open-reserva-modal flex items-center gap-2 bg-gradient-to-r from-sky-500 via-sky-600 to-blue-600 hover:from-sky-400 hover:to-blue-500 active:scale-95 text-white px-4 py-2 rounded-2xl text-xs sm:text-sm font-extrabold shadow-lg shadow-sky-500/25 transition">
           <span>➕</span>
           <span>Añadir Reserva</span>
         </button>
@@ -371,11 +371,11 @@
 
           <!-- 2 BOTONES PRINCIPALES DE ACCIÓN -->
           <div class="grid grid-cols-2 sm:flex sm:items-center gap-3 pt-3">
-            <button id="btn-ir-calendario" class="flex items-center justify-center gap-2 bg-white/95 hover:bg-white text-slate-900 font-extrabold py-3.5 px-6 rounded-2xl text-xs sm:text-sm shadow-xl hover:shadow-sky-500/20 active:scale-95 transition">
+            <button id="btn-ir-calendario" onclick="switchTab('calendario')" class="flex items-center justify-center gap-2 bg-white/95 hover:bg-white text-slate-900 font-extrabold py-3.5 px-6 rounded-2xl text-xs sm:text-sm shadow-xl hover:shadow-sky-500/20 active:scale-95 transition">
               <span class="text-base sm:text-lg">📅</span>
               <span>Ver Calendario</span>
             </button>
-            <button class="btn-open-reserva-modal flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-400 hover:to-orange-500 text-white font-extrabold py-3.5 px-6 rounded-2xl text-xs sm:text-sm shadow-xl shadow-amber-500/20 active:scale-95 transition">
+            <button onclick="openModalReserva()" class="btn-open-reserva-modal flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-400 hover:to-orange-500 text-white font-extrabold py-3.5 px-6 rounded-2xl text-xs sm:text-sm shadow-xl shadow-amber-500/20 active:scale-95 transition">
               <span class="text-base sm:text-lg">➕</span>
               <span>Añadir Reserva</span>
             </button>
@@ -587,32 +587,32 @@
     <div class="max-w-md mx-auto grid grid-cols-5 items-center text-center">
       
       <!-- Botón Inicio -->
-      <button data-tab-target="inicio" class="flex flex-col items-center justify-center py-1 text-sky-400 transition">
+      <button data-tab-target="inicio" onclick="switchTab('inicio')" class="flex flex-col items-center justify-center py-1 text-sky-400 transition">
         <span class="tab-icon text-xl transition-transform">🏠</span>
         <span class="tab-label text-[10px] font-bold text-sky-300 mt-0.5">Inicio</span>
       </button>
 
       <!-- Botón Calendario -->
-      <button data-tab-target="calendario" class="flex flex-col items-center justify-center py-1 text-slate-400 transition">
+      <button data-tab-target="calendario" onclick="switchTab('calendario')" class="flex flex-col items-center justify-center py-1 text-slate-400 transition">
         <span class="tab-icon text-xl transition-transform">📅</span>
         <span class="tab-label text-[10px] font-medium mt-0.5">Calendario</span>
       </button>
 
       <!-- Botón CENTRAL: Añadir Reserva -->
       <div class="flex items-center justify-center -mt-5">
-        <button class="btn-open-reserva-modal w-12 h-12 rounded-full bg-gradient-to-tr from-sky-500 via-sky-600 to-blue-600 text-white flex items-center justify-center shadow-lg shadow-sky-600/40 active:scale-90 hover:scale-105 transition">
+        <button onclick="openModalReserva()" class="btn-open-reserva-modal w-12 h-12 rounded-full bg-gradient-to-tr from-sky-500 via-sky-600 to-blue-600 text-white flex items-center justify-center shadow-lg shadow-sky-600/40 active:scale-90 hover:scale-105 transition">
           <span class="text-2xl font-light leading-none">＋</span>
         </button>
       </div>
 
       <!-- Botón Lista de Reservas -->
-      <button data-tab-target="lista" class="flex flex-col items-center justify-center py-1 text-slate-400 transition">
+      <button data-tab-target="lista" onclick="switchTab('lista')" class="flex flex-col items-center justify-center py-1 text-slate-400 transition">
         <span class="tab-icon text-xl transition-transform">📋</span>
         <span class="tab-label text-[10px] font-medium mt-0.5">Reservas</span>
       </button>
 
       <!-- Botón Info / Guía -->
-      <button data-tab-target="info" class="flex flex-col items-center justify-center py-1 text-slate-400 transition">
+      <button data-tab-target="info" onclick="switchTab('info')" class="flex flex-col items-center justify-center py-1 text-slate-400 transition">
         <span class="tab-icon text-xl transition-transform">🏡</span>
         <span class="tab-label text-[10px] font-medium mt-0.5">La Casa</span>
       </button>
@@ -635,7 +635,7 @@
             <p class="text-xs text-slate-400">Selecciona fechas y habitaciones a utilizar</p>
           </div>
         </div>
-        <button class="btn-close-modal w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center text-sm font-bold transition">
+        <button onclick="closeAllModals()" class="btn-close-modal w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center text-sm font-bold transition">
           ✕
         </button>
       </div>
@@ -682,15 +682,15 @@
 
           <!-- Botones táctiles -->
           <div class="grid grid-cols-3 gap-2">
-            <button type="button" data-hab="1" class="habitacion-btn active py-3 px-2 rounded-2xl border text-center transition flex flex-col items-center">
+            <button type="button" data-hab="1" onclick="selectHabitaciones(1)" class="habitacion-btn active py-3 px-2 rounded-2xl border text-center transition flex flex-col items-center">
               <span class="text-base mb-1">🛏️</span>
               <span class="text-xs font-bold">1 Habitación</span>
             </button>
-            <button type="button" data-hab="2" class="habitacion-btn py-3 px-2 rounded-2xl border border-slate-700 text-slate-300 bg-slate-800/60 text-center transition flex flex-col items-center">
+            <button type="button" data-hab="2" onclick="selectHabitaciones(2)" class="habitacion-btn py-3 px-2 rounded-2xl border border-slate-700 text-slate-300 bg-slate-800/60 text-center transition flex flex-col items-center">
               <span class="text-base mb-1">🛏️🛏️</span>
               <span class="text-xs font-bold">2 Habitaciones</span>
             </button>
-            <button type="button" data-hab="3" class="habitacion-btn py-3 px-2 rounded-2xl border border-slate-700 text-slate-300 bg-slate-800/60 text-center transition flex flex-col items-center">
+            <button type="button" data-hab="3" onclick="selectHabitaciones(3)" class="habitacion-btn py-3 px-2 rounded-2xl border border-slate-700 text-slate-300 bg-slate-800/60 text-center transition flex flex-col items-center">
               <span class="text-base mb-1">🏠</span>
               <span class="text-xs font-bold">3 (Toda la casa)</span>
             </button>
@@ -736,7 +736,7 @@
             </span>
           </div>
         </div>
-        <button class="btn-close-modal w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center text-sm font-bold transition">
+        <button onclick="closeAllModals()" class="btn-close-modal w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center text-sm font-bold transition">
           ✕
         </button>
       </div>
@@ -792,7 +792,7 @@
           <h3 class="font-black text-white text-base">Reservas en esta fecha</h3>
           <p id="multiples-fecha-title" class="text-xs text-slate-400">Fecha</p>
         </div>
-        <button class="btn-close-modal w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center text-sm font-bold transition">
+        <button onclick="closeAllModals()" class="btn-close-modal w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center text-sm font-bold transition">
           ✕
         </button>
       </div>
@@ -818,7 +818,7 @@
             <p class="text-xs text-slate-400">Modifica las normas, habitaciones o notas para que toda la familia lo vea</p>
           </div>
         </div>
-        <button class="btn-close-modal w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center text-sm font-bold transition">
+        <button onclick="closeAllModals()" class="btn-close-modal w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center text-sm font-bold transition">
           ✕
         </button>
       </div>
@@ -863,7 +863,7 @@
           </button>
           
           <div class="flex items-center gap-2 w-full sm:w-auto">
-            <button type="button" class="btn-close-modal w-full sm:w-auto px-4 py-2.5 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 transition">
+            <button type="button" onclick="closeAllModals()" class="btn-close-modal w-full sm:w-auto px-4 py-2.5 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 transition">
               Cancelar
             </button>
             <button type="submit" id="btn-submit-edit-casa"
@@ -884,7 +884,7 @@
   <div id="toast-container" class="fixed top-4 left-4 right-4 z-50 flex flex-col items-center gap-2 pointer-events-none max-w-md mx-auto"></div>
 
   <!-- Scripts -->
-  <script src="js/storage.js?v=5.0"></script>
-  <script src="js/app.js?v=5.0"></script>
+  <script src="js/storage.js?v=6.0"></script>
+  <script src="js/app.js?v=6.0"></script>
 </body>
 </html>

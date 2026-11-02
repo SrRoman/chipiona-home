@@ -54,7 +54,47 @@ const StorageService = {
     }
   },
 
-  // Obtener todas las reservas
+  // Obtener reservas de forma síncrona desde LocalStorage para carga instantánea
+  getLocalReservas() {
+    try {
+      const local = localStorage.getItem(this.STORAGE_KEY);
+      if (local) {
+        const parsed = JSON.parse(local);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return this.fixEncoding(parsed);
+        }
+      }
+    } catch (e) {
+      console.warn('Error leyendo reservas locales:', e);
+    }
+    const demo = this.getInitialDemoData();
+    try {
+      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(demo));
+    } catch(e) {}
+    return demo;
+  },
+
+  // Obtener info de la casa de forma síncrona desde LocalStorage
+  getLocalCasaInfo() {
+    try {
+      const local = localStorage.getItem(this.CASA_INFO_KEY);
+      if (local) {
+        const parsed = JSON.parse(local);
+        if (parsed && parsed.habitaciones) {
+          return this.fixEncoding(parsed);
+        }
+      }
+    } catch (e) {
+      console.warn('Error leyendo casa-info local:', e);
+    }
+    const defaultInfo = this.getDefaultCasaInfo();
+    try {
+      localStorage.setItem(this.CASA_INFO_KEY, JSON.stringify(defaultInfo));
+    } catch(e) {}
+    return defaultInfo;
+  },
+
+  // Obtener todas las reservas (con timeout de seguridad para no bloquear)
   async getReservas() {
     if (this.isApiAvailable) {
       try {
