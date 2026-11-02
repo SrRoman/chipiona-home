@@ -1447,36 +1447,25 @@ const StorageService = {
 
   // Obtener reservas de forma síncrona desde LocalStorage para carga instantánea en 0ms
   getLocalReservas() {
-    let localData = [];
     try {
       const local = localStorage.getItem(this.STORAGE_KEY);
-      if (local) {
+      if (local !== null) {
         const parsed = JSON.parse(local);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          localData = this.fixEncoding(parsed);
+        if (Array.isArray(parsed)) {
+          // Limpiar cualquier residuo de reservas eliminadas (como Tío Paco)
+          const clean = this.fixEncoding(parsed).filter(r => r.id !== 'res-1793658792196-17qt67');
+          return clean;
         }
       }
     } catch (e) {
       console.warn('Error leyendo reservas locales:', e);
     }
 
-    if (localData.length === 0) {
-      localData = this.getInitialDemoData();
-    } else {
-      // Asegurar que las reservas base (Roman) estén presentes
-      const initial = this.getInitialDemoData();
-      initial.forEach(initRes => {
-        if (!localData.some(r => r.id === initRes.id)) {
-          localData.push(initRes);
-        }
-      });
-    }
-
-    localData.sort((a, b) => new Date(a.checkIn) - new Date(b.checkIn));
+    const initial = this.getInitialDemoData();
     try {
-      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(localData));
+      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(initial));
     } catch(e) {}
-    return localData;
+    return initial;
   },
 
   // Obtener info de la casa de forma síncrona desde LocalStorage
@@ -1779,9 +1768,11 @@ const StorageService = {
   },
 
   async deleteFromTrashPermanently(id) {
-    const trash = this.getLocalTrash();
-    const nuevoTrash = trash.filter(r => r.id !== id);
-    localStorage.setItem(this.TRASH_STORAGE_KEY, JSON.stringify(nuevoTrash));
+    const trash = this.getLocalTrash().filter(r => r.id !== id);
+    localStorage.setItem(this.TRASH_STORAGE_KEY, JSON.stringify(trash));
+
+    const reservas = this.getLocalReservas().filter(r => r.id !== id);
+    localStorage.setItem(this.STORAGE_KEY, JSON.stringify(reservas));
 
     try {
       await fetch(`/api/trash/${id}`, { method: 'DELETE' });
@@ -1885,18 +1876,7 @@ const StorageService = {
   },
 
   getDefaultTrash() {
-    return [
-      {
-        id: 'res-demo-2',
-        nombre: 'Primo Alejandro',
-        checkIn: '2026-12-05',
-        checkOut: '2026-12-10',
-        habitaciones: 1,
-        comentarios: 'Vamos a pasar unos días de playa y comer en los chiringuitos de la Cruz del Mar.',
-        createdAt: '2026-11-02T16:00:00.000Z',
-        deletedAt: '2026-11-02T20:44:31.140Z'
-      }
-    ];
+    return [];
   },
 
   getDefaultCasaInfo() {
@@ -1917,15 +1897,6 @@ const StorageService = {
         habitaciones: 1,
         comentarios: 'Buenas Familia!! He creado esta APP para tener un poco de control y organizacion con quien se aloja en la casa de Chipiona, desde aqui podreis hacer reservas, eliminarlas (tened cuidado que podeis eliminar la de otras personas), seleccionar numero de habitaciones que vais a usar, y comentar cosas como voy con un invitado, etc. \n\nCualquier duda que tengais podeis preguntarla por el grupo de la familia, espero que os venga genial la aplicacion y cualquier cosita que querais implementar o modificar comentadselo a Alba.\n\nUn abrazo, Roman.',
         createdAt: '2026-11-02T20:48:21.064Z'
-      },
-      {
-        id: 'res-1793658792196-17qt67',
-        nombre: 'Tio paco',
-        checkIn: '2026-11-03',
-        checkOut: '2027-01-10',
-        habitaciones: 3,
-        comentarios: 'Llegaremos sobre las 4 y nos iremos a las 7',
-        createdAt: '2026-11-02T22:33:12.196Z'
       }
     ];
   }
@@ -3406,6 +3377,10 @@ async function eliminarReservaPermanente(id) {
   try {
     await StorageService.deleteFromTrashPermanently(id);
     AppState.trashReservas = StorageService.getLocalTrash();
+    AppState.reservas = AppState.reservas.filter(r => r.id !== id);
+    renderInicio();
+    renderCalendar();
+    renderLista();
     renderAdminPanel();
     showToast('🗑️ Reserva eliminada de forma permanente', 'info');
   } catch (error) {

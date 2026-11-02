@@ -7,14 +7,5 @@
     "habitaciones": 1,
     "comentarios": "Buenas Familia!! He creado esta APP para tener un poco de control y organizacion con quien se aloja en la casa de Chipiona, desde aqui podreis hacer reservas, eliminarlas (tened cuidado que podeis eliminar la de otras personas), seleccionar numero de habitaciones que vais a usar, y comentar cosas como voy con un invitado, etc. \n\nCualquier duda que tengais podeis preguntarla por el grupo de la familia, espero que os venga genial la aplicacion y cualquier cosita que querais implementar o modificar comentadselo a Alba.\n\nUn abrazo, Roman.",
     "createdAt": "2026-11-02T20:48:21.064Z"
-  },
-  {
-    "id": "res-1793658792196-17qt67",
-    "nombre": "Tio paco",
-    "checkIn": "2026-11-03",
-    "checkOut": "2027-01-10",
-    "habitaciones": 3,
-    "comentarios": "Llegaremos sobre las 4 y nos iremos a las 7",
-    "createdAt": "2026-11-02T22:33:12.196Z"
   }
 ]

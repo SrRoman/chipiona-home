@@ -1466,6 +1466,10 @@ async function eliminarReservaPermanente(id) {
   try {
     await StorageService.deleteFromTrashPermanently(id);
     AppState.trashReservas = StorageService.getLocalTrash();
+    AppState.reservas = AppState.reservas.filter(r => r.id !== id);
+    renderInicio();
+    renderCalendar();
+    renderLista();
     renderAdminPanel();
     showToast('🗑️ Reserva eliminada de forma permanente', 'info');
   } catch (error) {
