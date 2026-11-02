@@ -14,6 +14,22 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(__dirname));
 
+// Rutas estáticas explícitas para Vercel Serverless
+app.get('/js/app.js', (req, res) => {
+  res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+  res.sendFile(path.join(__dirname, 'js', 'app.js'));
+});
+
+app.get('/js/storage.js', (req, res) => {
+  res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+  res.sendFile(path.join(__dirname, 'js', 'storage.js'));
+});
+
+app.get('/css/styles.css', (req, res) => {
+  res.setHeader('Content-Type', 'text/css; charset=utf-8');
+  res.sendFile(path.join(__dirname, 'css', 'styles.css'));
+});
+
 // Ruta raíz
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
