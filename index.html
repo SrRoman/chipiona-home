@@ -59,16 +59,17 @@
       </div>
 
       <!-- Formulario de PIN -->
-      <form id="form-pin-lock" class="space-y-4">
+      <form id="form-pin-lock" onsubmit="event.preventDefault(); if(window.validarPIN) window.validarPIN();" class="space-y-4">
         <div id="pin-input-container" class="space-y-2">
           <input type="password" id="input-pin" inputmode="numeric" pattern="[0-9]*" maxlength="4" autofocus placeholder="••••"
+                 oninput="if(this.value.replace(/\D/g, '').length >= 4 && window.validarPIN) window.validarPIN();"
                  class="w-48 mx-auto tracking-[0.75em] text-center text-3xl font-black bg-slate-950/90 border-2 border-slate-700 focus:border-sky-500 focus:ring-4 focus:ring-sky-500/20 text-white rounded-2xl py-3 px-4 focus:outline-none transition shadow-inner font-mono" />
           <p id="pin-error-msg" class="text-xs text-rose-400 font-semibold hidden">
             ❌ PIN incorrecto. Inténtalo de nuevo.
           </p>
         </div>
 
-        <button type="submit" id="btn-submit-pin"
+        <button type="submit" id="btn-submit-pin" onclick="if(window.validarPIN) window.validarPIN();"
                 class="w-full py-3.5 bg-gradient-to-r from-sky-500 via-sky-600 to-blue-600 hover:from-sky-400 text-white font-extrabold text-sm rounded-2xl shadow-lg shadow-sky-600/30 transition active:scale-95">
           Entrar a la Web 🏖️
         </button>
@@ -79,6 +80,20 @@
       </p>
     </div>
   </div>
+
+  <!-- Verificación inicial instantánea para evitar parpadeo si ya está autenticado -->
+  <script>
+    (function() {
+      try {
+        if (localStorage.getItem('chipiona_auth_pin_verified') === '8080') {
+          var lock = document.getElementById('screen-pin-lock');
+          if (lock) {
+            lock.style.setProperty('display', 'none', 'important');
+          }
+        }
+      } catch(e) {}
+    })();
+  </script>
 
   <!-- Fondo sutil con destellos de luz oceánica -->
   <div class="fixed inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(14,165,233,0.15),rgba(255,255,255,0))] pointer-events-none -z-10"></div>

@@ -38,26 +38,34 @@ function getColorForName(name) {
 
 // Inicialización de la aplicación al cargar el DOM
 document.addEventListener('DOMContentLoaded', async () => {
-  // Inicializar servicio de almacenamiento (detecta servidor o localstorage)
-  await StorageService.init();
-
-  // Cargar reservas e información de la casa
-  await Promise.all([
-    loadReservas(),
-    loadCasaInfo()
-  ]);
-
-  // Configurar Datepicker de hotel (Flatpickr)
-  initDatepicker();
-
-  // Configurar escuchadores de eventos
-  setupEventListeners();
-
-  // Configurar y verificar sistema de seguridad por PIN (8080)
+  // 1. SEGURIDAD INMEDIATA (sin esperar a peticiones de red)
   setupPINAuth();
   checkAuthPIN();
 
-  // Renderizar vistas iniciales
+  // 2. Inicializar servicio de almacenamiento (detecta servidor o localstorage)
+  try {
+    await StorageService.init();
+  } catch (err) {
+    console.warn('StorageService.init fallback:', err);
+  }
+
+  // 3. Cargar reservas e información de la casa
+  try {
+    await Promise.all([
+      loadReservas(),
+      loadCasaInfo()
+    ]);
+  } catch (err) {
+    console.warn('Carga de datos fallback:', err);
+  }
+
+  // 4. Configurar Datepicker de hotel (Flatpickr)
+  initDatepicker();
+
+  // 5. Configurar escuchadores de eventos
+  setupEventListeners();
+
+  // 6. Renderizar vistas iniciales
   renderInicio();
   renderCalendar();
   renderLista();
@@ -1063,14 +1071,51 @@ function checkAuthPIN() {
   if (!lockScreen) return;
 
   if (isAuth) {
+    lockScreen.style.setProperty('display', 'none', 'important');
     lockScreen.classList.add('hidden');
   } else {
+    lockScreen.style.setProperty('display', 'flex', 'important');
     lockScreen.classList.remove('hidden');
     const inputPin = document.getElementById('input-pin');
     if (inputPin) {
       inputPin.value = '';
-      setTimeout(() => inputPin.focus(), 250);
+      setTimeout(() => inputPin.focus(), 200);
     }
+  }
+}
+
+function validarPIN() {
+  const inputPin = document.getElementById('input-pin');
+  const errorMsg = document.getElementById('pin-error-msg');
+  const lockScreen = document.getElementById('screen-pin-lock');
+  const container = document.getElementById('pin-input-container');
+
+  if (!inputPin || !lockScreen) return;
+
+  // Extraer únicamente los dígitos numéricos
+  const valor = inputPin.value.replace(/\D/g, '').trim();
+
+  if (valor === PIN_CORRECTO) {
+    localStorage.setItem(PIN_STORAGE_KEY, PIN_CORRECTO);
+    if (errorMsg) errorMsg.classList.add('hidden');
+    
+    // Ocultar pantalla de bloqueo de inmediato y de forma garantizada
+    lockScreen.classList.add('animate-fade-out');
+    setTimeout(() => {
+      lockScreen.style.setProperty('display', 'none', 'important');
+      lockScreen.classList.add('hidden');
+      lockScreen.classList.remove('animate-fade-out');
+    }, 150);
+
+    showToast('¡PIN correcto! Bienvenido/a a Casa Chipiona 🏖️', 'success');
+  } else {
+    if (errorMsg) errorMsg.classList.remove('hidden');
+    if (container) {
+      container.classList.add('animate-shake');
+      setTimeout(() => container.classList.remove('animate-shake'), 450);
+    }
+    inputPin.value = '';
+    inputPin.focus();
   }
 }
 
@@ -1079,46 +1124,35 @@ function setupPINAuth() {
   const inputPin = document.getElementById('input-pin');
   const errorMsg = document.getElementById('pin-error-msg');
   const lockScreen = document.getElementById('screen-pin-lock');
-  const container = document.getElementById('pin-input-container');
 
-  if (!form || !inputPin) return;
+  if (!inputPin) return;
 
-  // Auto-validar automáticamente al teclear los 4 dígitos
-  inputPin.addEventListener('input', () => {
+  // Auto-validar automáticamente al teclear 4 dígitos
+  const handleInputCheck = () => {
     if (errorMsg) errorMsg.classList.add('hidden');
-    if (inputPin.value.length === 4) {
+    const digits = inputPin.value.replace(/\D/g, '');
+    if (digits.length >= 4) {
       validarPIN();
     }
-  });
+  };
 
-  form.addEventListener('submit', (e) => {
-    e.preventDefault();
-    validarPIN();
-  });
-
-  function validarPIN() {
-    const valor = inputPin.value.trim();
-    if (valor === PIN_CORRECTO) {
-      localStorage.setItem(PIN_STORAGE_KEY, PIN_CORRECTO);
-      if (errorMsg) errorMsg.classList.add('hidden');
-      lockScreen.classList.add('animate-fade-out');
-      setTimeout(() => {
-        lockScreen.classList.add('hidden');
-        lockScreen.classList.remove('animate-fade-out');
-      }, 200);
-      showToast('¡PIN correcto! Bienvenido/a 🏖️', 'success');
+  inputPin.addEventListener('input', handleInputCheck);
+  inputPin.addEventListener('keyup', (e) => {
+    if (e.key === 'Enter') {
+      validarPIN();
     } else {
-      if (errorMsg) errorMsg.classList.remove('hidden');
-      if (container) {
-        container.classList.add('animate-shake');
-        setTimeout(() => container.classList.remove('animate-shake'), 450);
-      }
-      inputPin.value = '';
-      inputPin.focus();
+      handleInputCheck();
     }
+  });
+
+  if (form) {
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      validarPIN();
+    });
   }
 
-  // Botón para bloquear / cerrar sesión manualmente si se desea
+  // Botón para bloquear / cerrar sesión manualmente
   const btnLock = document.getElementById('btn-lock-session');
   if (btnLock) {
     btnLock.addEventListener('click', () => {
@@ -1129,10 +1163,11 @@ function setupPINAuth() {
   }
 }
 
-// Exponer funciones necesarias
+// Exponer funciones necesarias globalmente
 window.openModalReserva = openModalReserva;
 window.openModalDetalle = openModalDetalle;
 window.openModalEditarCasa = openModalEditarCasa;
 window.closeAllModals = closeAllModals;
 window.switchTab = switchTab;
 window.checkAuthPIN = checkAuthPIN;
+window.validarPIN = validarPIN;
