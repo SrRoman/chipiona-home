@@ -53,6 +53,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Configurar escuchadores de eventos
   setupEventListeners();
 
+  // Configurar y verificar sistema de seguridad por PIN (8080)
+  setupPINAuth();
+  checkAuthPIN();
+
   // Renderizar vistas iniciales
   renderInicio();
   renderCalendar();
@@ -1047,9 +1051,88 @@ function showToast(message, type = 'info') {
   }, 3500);
 }
 
+// ==========================================
+// SEGURIDAD: CONTROL DE ACCESO POR PIN (8080)
+// ==========================================
+const PIN_CORRECTO = '8080';
+const PIN_STORAGE_KEY = 'chipiona_auth_pin_verified';
+
+function checkAuthPIN() {
+  const isAuth = localStorage.getItem(PIN_STORAGE_KEY) === PIN_CORRECTO;
+  const lockScreen = document.getElementById('screen-pin-lock');
+  if (!lockScreen) return;
+
+  if (isAuth) {
+    lockScreen.classList.add('hidden');
+  } else {
+    lockScreen.classList.remove('hidden');
+    const inputPin = document.getElementById('input-pin');
+    if (inputPin) {
+      inputPin.value = '';
+      setTimeout(() => inputPin.focus(), 250);
+    }
+  }
+}
+
+function setupPINAuth() {
+  const form = document.getElementById('form-pin-lock');
+  const inputPin = document.getElementById('input-pin');
+  const errorMsg = document.getElementById('pin-error-msg');
+  const lockScreen = document.getElementById('screen-pin-lock');
+  const container = document.getElementById('pin-input-container');
+
+  if (!form || !inputPin) return;
+
+  // Auto-validar automáticamente al teclear los 4 dígitos
+  inputPin.addEventListener('input', () => {
+    if (errorMsg) errorMsg.classList.add('hidden');
+    if (inputPin.value.length === 4) {
+      validarPIN();
+    }
+  });
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    validarPIN();
+  });
+
+  function validarPIN() {
+    const valor = inputPin.value.trim();
+    if (valor === PIN_CORRECTO) {
+      localStorage.setItem(PIN_STORAGE_KEY, PIN_CORRECTO);
+      if (errorMsg) errorMsg.classList.add('hidden');
+      lockScreen.classList.add('animate-fade-out');
+      setTimeout(() => {
+        lockScreen.classList.add('hidden');
+        lockScreen.classList.remove('animate-fade-out');
+      }, 200);
+      showToast('¡PIN correcto! Bienvenido/a 🏖️', 'success');
+    } else {
+      if (errorMsg) errorMsg.classList.remove('hidden');
+      if (container) {
+        container.classList.add('animate-shake');
+        setTimeout(() => container.classList.remove('animate-shake'), 450);
+      }
+      inputPin.value = '';
+      inputPin.focus();
+    }
+  }
+
+  // Botón para bloquear / cerrar sesión manualmente si se desea
+  const btnLock = document.getElementById('btn-lock-session');
+  if (btnLock) {
+    btnLock.addEventListener('click', () => {
+      localStorage.removeItem(PIN_STORAGE_KEY);
+      checkAuthPIN();
+      showToast('Sesión bloqueada 🔒', 'info');
+    });
+  }
+}
+
 // Exponer funciones necesarias
 window.openModalReserva = openModalReserva;
 window.openModalDetalle = openModalDetalle;
 window.openModalEditarCasa = openModalEditarCasa;
 window.closeAllModals = closeAllModals;
 window.switchTab = switchTab;
+window.checkAuthPIN = checkAuthPIN;

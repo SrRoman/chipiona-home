@@ -38,6 +38,48 @@
 </head>
 <body class="bg-gradient-to-br from-[#06101e] via-[#091b34] to-[#040d1a] text-slate-100 min-h-screen antialiased flex flex-col selection:bg-sky-500 selection:text-white">
 
+  <!-- ========================================================
+       PANTALLA DE BLOQUEO POR PIN (8080)
+  ======================================================== -->
+  <div id="screen-pin-lock" class="fixed inset-0 z-[100] bg-gradient-to-br from-[#040914] via-[#07152b] to-[#030a17] flex items-center justify-center p-4">
+    <div class="w-full max-w-sm bg-slate-900/90 border border-sky-900/50 rounded-3xl p-6 sm:p-8 text-center space-y-6 shadow-2xl backdrop-blur-xl">
+      
+      <!-- Icono y Título -->
+      <div class="space-y-3 flex flex-col items-center">
+        <div class="w-16 h-16 rounded-3xl bg-gradient-to-tr from-sky-600 via-sky-500 to-cyan-400 text-white flex items-center justify-center text-3xl shadow-xl shadow-sky-600/40">
+          🔒
+        </div>
+        <div>
+          <h2 class="text-xl font-black text-white">Casa Chipiona</h2>
+          <p class="text-xs text-sky-400 font-semibold mt-0.5">Acceso Familiar Protegido</p>
+        </div>
+        <p class="text-xs text-slate-400 max-w-xs leading-relaxed">
+          Introduce el código PIN familiar de 4 dígitos para acceder al calendario y las reservas.
+        </p>
+      </div>
+
+      <!-- Formulario de PIN -->
+      <form id="form-pin-lock" class="space-y-4">
+        <div id="pin-input-container" class="space-y-2">
+          <input type="password" id="input-pin" inputmode="numeric" pattern="[0-9]*" maxlength="4" autofocus placeholder="••••"
+                 class="w-48 mx-auto tracking-[0.75em] text-center text-3xl font-black bg-slate-950/90 border-2 border-slate-700 focus:border-sky-500 focus:ring-4 focus:ring-sky-500/20 text-white rounded-2xl py-3 px-4 focus:outline-none transition shadow-inner font-mono" />
+          <p id="pin-error-msg" class="text-xs text-rose-400 font-semibold hidden">
+            ❌ PIN incorrecto. Inténtalo de nuevo.
+          </p>
+        </div>
+
+        <button type="submit" id="btn-submit-pin"
+                class="w-full py-3.5 bg-gradient-to-r from-sky-500 via-sky-600 to-blue-600 hover:from-sky-400 text-white font-extrabold text-sm rounded-2xl shadow-lg shadow-sky-600/30 transition active:scale-95">
+          Entrar a la Web 🏖️
+        </button>
+      </form>
+
+      <p class="text-[11px] text-slate-500">
+        ¿No recuerdas el PIN? Pídelo por el grupo de la familia.
+      </p>
+    </div>
+  </div>
+
   <!-- Fondo sutil con destellos de luz oceánica -->
   <div class="fixed inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(14,165,233,0.15),rgba(255,255,255,0))] pointer-events-none -z-10"></div>
 
@@ -74,11 +116,16 @@
         </button>
       </nav>
 
-      <!-- Botón directo de Reservar -->
-      <button class="btn-open-reserva-modal flex items-center gap-2 bg-gradient-to-r from-sky-500 via-sky-600 to-blue-600 hover:from-sky-400 hover:to-blue-500 active:scale-95 text-white px-4 py-2 rounded-2xl text-xs sm:text-sm font-extrabold shadow-lg shadow-sky-500/25 transition">
-        <span>➕</span>
-        <span>Añadir Reserva</span>
-      </button>
+      <!-- Botones de Acción Header: Bloquear y Reservar -->
+      <div class="flex items-center gap-2">
+        <button id="btn-lock-session" class="p-2 rounded-2xl bg-slate-800/60 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/80 transition" title="Bloquear / Cerrar Sesión">
+          🔒
+        </button>
+        <button class="btn-open-reserva-modal flex items-center gap-2 bg-gradient-to-r from-sky-500 via-sky-600 to-blue-600 hover:from-sky-400 hover:to-blue-500 active:scale-95 text-white px-4 py-2 rounded-2xl text-xs sm:text-sm font-extrabold shadow-lg shadow-sky-500/25 transition">
+          <span>➕</span>
+          <span>Añadir Reserva</span>
+        </button>
+      </div>
 
     </div>
   </header>
