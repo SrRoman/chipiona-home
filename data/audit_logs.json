@@ -1,1 +1,10 @@
-
+[
+  {
+    "id": "log-1793652501241-l3fs4m",
+    "tipo": "CREACION",
+    "titulo": "Nueva reserva: Roman",
+    "detalle": "2026-11-02 al 2026-11-03 (1 hab.)",
+    "timestamp": "2026-11-02T20:48:21.241Z",
+    "reservaId": "res-1793652501064-r0hx51"
+  }
+]

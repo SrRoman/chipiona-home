@@ -71,13 +71,22 @@ Aplicación web diseñada con enfoque **Mobile-First** (optimizada al 100% para 
 
 Para que cualquier familiar pueda reservar desde cualquier sitio mediante un enlace en WhatsApp sin necesidad de estar en la misma red Wi-Fi:
 
-1. **Render.com / Railway (Recomendado con servidor Node):**
-   - Sube esta carpeta a GitHub.
-   - En [Render.com](https://render.com), crea un nuevo **Web Service**, selecciona el repositorio y establece `npm start` como Start Command.
-   - Te dará una dirección web permanente tipo `https://casa-chipiona.onrender.com`.
+1. **Base de Datos Cloud en Supabase (Recomendado):**
+   - El proyecto ya está configurado con Supabase.
+   - Si creas un nuevo proyecto o necesitas regenerar las tablas, ejecuta en el **SQL Editor** de Supabase el script [`supabase.sql`](supabase.sql).
+   - Variables de entorno (`.env`):
+     ```env
+     SUPABASE_URL=https://ktvytchrrowvvwlglreo.supabase.co
+     SUPABASE_KEY=sb_publishable_of7Wn9ExHHD5RyrWu-M7og_nId7gtm6
+     ```
 
-2. **Vercel / Netlify / GitHub Pages (Modo estático):**
-   - Si no quieres usar servidor backend, la aplicación detecta automáticamente si no hay API y guarda los datos al instante en el navegador (`localStorage`).
+2. **Vercel / Render.com / Railway:**
+   - Sube esta carpeta a GitHub y conéctala a Vercel o Render.
+   - Añade las variables de entorno `SUPABASE_URL` y `SUPABASE_KEY`.
+   - Vercel despliega automáticamente la API en `/api/*` y la web estática.
+
+3. **Modo Estático / GitHub Pages:**
+   - La web se conecta directamente a Supabase Cloud desde el navegador (`StorageService`), sincronizando todas las reservas entre todos los dispositivos en tiempo real sin requerir backend propio.
 
 ---
 

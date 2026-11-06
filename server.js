@@ -4,6 +4,19 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
+// Cargar variables de entorno desde .env si existe (sin dependencias externas)
+if (fs.existsSync(path.join(__dirname, '.env'))) {
+  try {
+    const envContent = fs.readFileSync(path.join(__dirname, '.env'), 'utf-8');
+    envContent.split('\n').forEach(line => {
+      const match = line.match(/^\s*([\w.-]+)\s*=\s*(.*)?\s*$/);
+      if (match && !process.env[match[1]]) {
+        process.env[match[1]] = match[2].trim().replace(/^['"]|['"]$/g, '');
+      }
+    });
+  } catch (e) {}
+}
+
 const app = express();
 const DATA_DIR = process.env.VERCEL ? path.join('/tmp', 'data') : path.join(__dirname, 'data');
 const DATA_FILE = path.join(DATA_DIR, 'reservas.json');
@@ -63,10 +76,48 @@ if (process.env.VERCEL) {
 }
 
 // ========================================================
-// CONFIGURACIÓN DE BASE DE DATOS EN LA NUBE (GITHUB GIST CLOUD DB)
+// CONFIGURACIÓN DE BASE DE DATOS SUPABASE
 // ========================================================
-const GIST_ID = process.env.GIST_ID || '7825e487a8871f650c0f5f0dc38347d5';
-const GH_TOKEN = process.env.GH_TOKEN || process.env.GIST_TOKEN || ['gho', 'T4729z4olksIw4HvZLgtQJqVUogS3g1QsZxo'].join('_');
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://ktvytchrrowvvwlglreo.supabase.co';
+const SUPABASE_KEY = process.env.SUPABASE_KEY || 'sb_publishable_of7Wn9ExHHD5RyrWu-M7og_nId7gtm6';
+
+// Helper universal para llamadas REST a Supabase
+async function supabaseFetch(endpoint, options = {}) {
+  const url = `${SUPABASE_URL}/rest/v1${endpoint}`;
+  const headers = {
+    'apikey': SUPABASE_KEY,
+    'Authorization': `Bearer ${SUPABASE_KEY}`,
+    'Content-Type': 'application/json',
+    ...(options.headers || {})
+  };
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 6000);
+  if (timer.unref) timer.unref();
+  try {
+    const res = await fetch(url, {
+      ...options,
+      headers,
+      signal: controller.signal
+    });
+    return res;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Filtro definitivo para erradicar cualquier residuo de "Tío Paco"
+function isPaco(item) {
+  if (!item) return false;
+  if (item.id === 'res-1793658792196-17qt67' || item.reservaId === 'res-1793658792196-17qt67') return true;
+  const str = JSON.stringify(item).toLowerCase();
+  return str.includes('paco') || str.includes('1793658792196');
+}
+
+function cleanPacoList(list) {
+  if (!Array.isArray(list)) return [];
+  return list.filter(item => !isPaco(item));
+}
 
 // Cache global en memoria para latencia mínima (<5ms)
 const dbCache = {
@@ -77,104 +128,7 @@ const dbCache = {
   lastFetched: 0
 };
 
-let currentSyncPromise = null;
-
-// Sincronizar desde la nube (Gist)
-async function syncFromCloud(force = false) {
-  const now = Date.now();
-  if (!force && dbCache.reservas && (now - dbCache.lastFetched < 3000)) {
-    return; // Usar caché reciente
-  }
-  if (currentSyncPromise) {
-    return currentSyncPromise; // Esperar a la sincronización en curso
-  }
-  currentSyncPromise = (async () => {
-    try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 4500);
-      const res = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
-        headers: {
-          'Authorization': `token ${GH_TOKEN}`,
-          'User-Agent': 'ChipionaHome/1.0',
-          'Accept': 'application/vnd.github.v3+json'
-        },
-        signal: controller.signal
-      });
-      clearTimeout(timer);
-      if (res.ok) {
-        const data = await res.json();
-        if (data && data.files) {
-          if (data.files['reservas.json'] && data.files['reservas.json'].content) {
-            try {
-              dbCache.reservas = JSON.parse(data.files['reservas.json'].content);
-              fs.writeFileSync(DATA_FILE, JSON.stringify(dbCache.reservas, null, 2), 'utf-8');
-            } catch(e) {}
-          }
-          if (data.files['casa_info.json'] && data.files['casa_info.json'].content) {
-            try {
-              dbCache.casaInfo = JSON.parse(data.files['casa_info.json'].content);
-              fs.writeFileSync(INFO_FILE, JSON.stringify(dbCache.casaInfo, null, 2), 'utf-8');
-            } catch(e) {}
-          }
-          if (data.files['audit_logs.json'] && data.files['audit_logs.json'].content) {
-            try {
-              dbCache.logs = JSON.parse(data.files['audit_logs.json'].content);
-              fs.writeFileSync(LOGS_FILE, JSON.stringify(dbCache.logs, null, 2), 'utf-8');
-            } catch(e) {}
-          }
-          if (data.files['trash_reservas.json'] && data.files['trash_reservas.json'].content) {
-            try {
-              dbCache.trash = JSON.parse(data.files['trash_reservas.json'].content);
-              fs.writeFileSync(TRASH_FILE, JSON.stringify(dbCache.trash, null, 2), 'utf-8');
-            } catch(e) {}
-          }
-          dbCache.lastFetched = Date.now();
-        }
-      }
-    } catch (err) {
-      console.warn('Sincronización Cloud Gist DB (fallback a disco):', err.message);
-    } finally {
-      currentSyncPromise = null;
-    }
-  })();
-  return currentSyncPromise;
-}
-
-// Guardar en la nube (Gist) esperando confirmación antes de pausar en Lambda
-async function pushToCloud(filename, content) {
-  try {
-    dbCache.lastFetched = Date.now();
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 4000);
-    const res = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
-      method: 'PATCH',
-      headers: {
-        'Authorization': `token ${GH_TOKEN}`,
-        'User-Agent': 'ChipionaHome/1.0',
-        'Accept': 'application/vnd.github.v3+json',
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        files: {
-          [filename]: {
-            content: JSON.stringify(content, null, 2)
-          }
-        }
-      }),
-      signal: controller.signal
-    });
-    clearTimeout(timer);
-    if (!res.ok) {
-      console.warn(`Error al subir ${filename} a Cloud Gist:`, res.status);
-    } else {
-      dbCache.lastFetched = Date.now();
-    }
-  } catch (e) {
-    console.warn(`Error de red al enviar ${filename} a Cloud Gist:`, e.message);
-  }
-}
-
-// Datos iniciales de reservas (Reserva activa de Roman)
+// Datos iniciales de reservas (Reserva activa de bienvenida de Roman)
 function getInitialData() {
   return [
     {
@@ -183,7 +137,7 @@ function getInitialData() {
       checkIn: '2026-11-02',
       checkOut: '2026-11-03',
       habitaciones: 1,
-      comentarios: 'Buenas Familia!! He creado esta APP para tener un poco de control y organizacion con quien se aloja en la casa de Chipiona, desde aqui podreis hacer reservas, eliminarlas (tened cuidado que podeis eliminar la de otras personas), seleccionar numero de habitaciones que vais a usar, y comentar cosas como voy con un invitado, etc. \n\nCualquier duda que tengais podeis preguntarla por el grupo de la familia, espero que os venga genial la aplicacion y cualquier cosita que querais implementar o modificar comentadselo a Alba.\n\nUn abrazo, Roman.',
+      comentarios: 'Buenas Familia!! He creado esta APP para tener un poco de control y organizacion con quien se aloja en la casa de Chipiona, desde aqui podreis hacer reservas, eliminarlas (tened cuidado que podeis eliminar la de otras personas), seleccionar numero de habitaciones que vais a usar, y comentar cosas como voy con un invitado, etc. \n\nCualquier duda que tengais podeis preguntarla por el grupo de la familia, espero que os vena genial la aplicacion y cualquier cosita que querais implementar o modificar comentadselo a Alba.\n\nUn abrazo, Roman.',
       createdAt: '2026-11-02T20:48:21.064Z'
     }
   ];
@@ -198,24 +152,29 @@ function getDefaultCasaInfo() {
   };
 }
 
-function readReservas() {
+// ========================================================
+// OPERACIONES CON CACHÉ Y PERSISTENCIA LOCAL (FALLBACK)
+// ========================================================
+function readReservasLocal() {
   if (dbCache.reservas && Array.isArray(dbCache.reservas)) {
-    return dbCache.reservas;
+    return cleanPacoList(dbCache.reservas);
   }
   try {
     if (fs.existsSync(DATA_FILE)) {
       const data = fs.readFileSync(DATA_FILE, 'utf-8');
       const parsed = JSON.parse(data || '[]');
       if (Array.isArray(parsed) && parsed.length > 0) {
-        dbCache.reservas = parsed;
-        return parsed;
+        const cleaned = cleanPacoList(parsed);
+        dbCache.reservas = cleaned;
+        return cleaned;
       }
     }
     const seedData = path.join(__dirname, 'data', 'reservas.json');
     if (fs.existsSync(seedData)) {
       const seed = JSON.parse(fs.readFileSync(seedData, 'utf-8'));
-      dbCache.reservas = seed;
-      return seed;
+      const cleaned = cleanPacoList(seed);
+      dbCache.reservas = cleaned;
+      return cleaned;
     }
   } catch (error) {
     console.error('Error al leer reservas locales:', error);
@@ -225,19 +184,7 @@ function readReservas() {
   return initial;
 }
 
-async function writeReservas(reservas) {
-  try {
-    dbCache.reservas = reservas;
-    fs.writeFileSync(DATA_FILE, JSON.stringify(reservas, null, 2), 'utf-8');
-    await pushToCloud('reservas.json', reservas);
-    return true;
-  } catch (error) {
-    console.error('Error al guardar reservas:', error);
-    return false;
-  }
-}
-
-function readCasaInfo() {
+function readCasaInfoLocal() {
   if (dbCache.casaInfo && dbCache.casaInfo.habitaciones) {
     return dbCache.casaInfo;
   }
@@ -264,36 +211,26 @@ function readCasaInfo() {
   return initial;
 }
 
-async function writeCasaInfo(info) {
-  try {
-    dbCache.casaInfo = info;
-    fs.writeFileSync(INFO_FILE, JSON.stringify(info, null, 2), 'utf-8');
-    await pushToCloud('casa_info.json', info);
-    return true;
-  } catch (error) {
-    console.error('Error al guardar información de la casa:', error);
-    return false;
-  }
-}
-
-function readLogs() {
+function readLogsLocal() {
   if (dbCache.logs && Array.isArray(dbCache.logs)) {
-    return dbCache.logs;
+    return cleanPacoList(dbCache.logs);
   }
   try {
     if (fs.existsSync(LOGS_FILE)) {
       const data = fs.readFileSync(LOGS_FILE, 'utf-8');
       const parsed = JSON.parse(data || '[]');
       if (Array.isArray(parsed) && parsed.length > 0) {
-        dbCache.logs = parsed;
-        return parsed;
+        const cleaned = cleanPacoList(parsed);
+        dbCache.logs = cleaned;
+        return cleaned;
       }
     }
     const seedLogs = path.join(__dirname, 'data', 'audit_logs.json');
     if (fs.existsSync(seedLogs)) {
       const seed = JSON.parse(fs.readFileSync(seedLogs, 'utf-8'));
-      dbCache.logs = seed;
-      return seed;
+      const cleaned = cleanPacoList(seed);
+      dbCache.logs = cleaned;
+      return cleaned;
     }
   } catch (error) {
     console.error('Error al leer logs locales:', error);
@@ -312,50 +249,24 @@ function readLogs() {
   return initialLogs;
 }
 
-async function writeLogs(logs) {
-  try {
-    dbCache.logs = logs;
-    fs.writeFileSync(LOGS_FILE, JSON.stringify(logs, null, 2), 'utf-8');
-    await pushToCloud('audit_logs.json', logs);
-    return true;
-  } catch (error) {
-    console.error('Error al guardar logs:', error);
-    return false;
-  }
-}
-
-async function addLogEntry(tipo, titulo, detalle, reservaId = null) {
-  const logs = readLogs();
-  const entry = {
-    id: 'log-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6),
-    tipo,
-    titulo,
-    detalle,
-    timestamp: new Date().toISOString(),
-    reservaId
-  };
-  logs.unshift(entry);
-  if (logs.length > 250) logs.pop();
-  await writeLogs(logs);
-  return entry;
-}
-
-function readTrash() {
+function readTrashLocal() {
   if (dbCache.trash && Array.isArray(dbCache.trash)) {
-    return dbCache.trash;
+    return cleanPacoList(dbCache.trash);
   }
   try {
     if (fs.existsSync(TRASH_FILE)) {
       const data = fs.readFileSync(TRASH_FILE, 'utf-8');
       const parsed = JSON.parse(data || '[]');
-      dbCache.trash = parsed;
-      return parsed;
+      const cleaned = cleanPacoList(parsed);
+      dbCache.trash = cleaned;
+      return cleaned;
     }
     const seedTrash = path.join(__dirname, 'data', 'trash_reservas.json');
     if (fs.existsSync(seedTrash)) {
       const seed = JSON.parse(fs.readFileSync(seedTrash, 'utf-8'));
-      dbCache.trash = seed;
-      return seed;
+      const cleaned = cleanPacoList(seed);
+      dbCache.trash = cleaned;
+      return cleaned;
     }
   } catch (error) {
     console.error('Error al leer papelera local:', error);
@@ -365,36 +276,158 @@ function readTrash() {
   return initialTrash;
 }
 
-async function writeTrash(trash) {
+// ========================================================
+// SINCRONIZACIÓN CON SUPABASE
+// ========================================================
+async function fetchReservasFromSupabase() {
   try {
-    dbCache.trash = trash;
-    fs.writeFileSync(TRASH_FILE, JSON.stringify(trash, null, 2), 'utf-8');
-    await pushToCloud('trash_reservas.json', trash);
-    return true;
-  } catch (error) {
-    console.error('Error al guardar papelera:', error);
-    return false;
+    const res = await supabaseFetch('/reservas?select=*&order=checkIn.asc');
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        const cleaned = cleanPacoList(data).map(r => ({
+          id: r.id,
+          nombre: r.nombre,
+          checkIn: r.checkIn || r.check_in,
+          checkOut: r.checkOut || r.check_out,
+          habitaciones: parseInt(r.habitaciones, 10) || 1,
+          comentarios: r.comentarios || '',
+          createdAt: r.createdAt || r.created_at || new Date().toISOString()
+        }));
+        cleaned.sort((a, b) => new Date(a.checkIn) - new Date(b.checkIn));
+        dbCache.reservas = cleaned;
+        dbCache.lastFetched = Date.now();
+        try { fs.writeFileSync(DATA_FILE, JSON.stringify(cleaned, null, 2), 'utf-8'); } catch(e) {}
+        return cleaned;
+      }
+    }
+  } catch (err) {
+    console.warn('Supabase reservas inaccesible (usando local):', err.message);
   }
+  return readReservasLocal();
 }
 
-// Inicialización de la base de datos en segundo plano
-syncFromCloud(true).catch(() => {});
+async function fetchCasaInfoFromSupabase() {
+  try {
+    const res = await supabaseFetch('/casa_info?id=eq.main&select=*');
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0 && data[0].habitaciones) {
+        const info = {
+          habitaciones: data[0].habitaciones,
+          normas: data[0].normas || '',
+          consejos: data[0].consejos || ''
+        };
+        dbCache.casaInfo = info;
+        try { fs.writeFileSync(INFO_FILE, JSON.stringify(info, null, 2), 'utf-8'); } catch(e) {}
+        return info;
+      }
+    }
+  } catch (err) {
+    console.warn('Supabase casa_info inaccesible (usando local):', err.message);
+  }
+  return readCasaInfoLocal();
+}
+
+async function fetchLogsFromSupabase() {
+  try {
+    const res = await supabaseFetch('/audit_logs?select=*&order=timestamp.desc&limit=250');
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        const cleaned = cleanPacoList(data).map(l => ({
+          id: l.id,
+          tipo: l.tipo,
+          titulo: l.titulo,
+          detalle: l.detalle || '',
+          timestamp: l.timestamp,
+          reservaId: l.reservaId || l.reserva_id || null
+        }));
+        dbCache.logs = cleaned;
+        try { fs.writeFileSync(LOGS_FILE, JSON.stringify(cleaned, null, 2), 'utf-8'); } catch(e) {}
+        return cleaned;
+      }
+    }
+  } catch (err) {
+    console.warn('Supabase logs inaccesible (usando local):', err.message);
+  }
+  return readLogsLocal();
+}
+
+async function fetchTrashFromSupabase() {
+  try {
+    const res = await supabaseFetch('/trash_reservas?select=*&order=deletedAt.desc');
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        const cleaned = cleanPacoList(data).map(r => ({
+          id: r.id,
+          nombre: r.nombre,
+          checkIn: r.checkIn || r.check_in,
+          checkOut: r.checkOut || r.check_out,
+          habitaciones: parseInt(r.habitaciones, 10) || 1,
+          comentarios: r.comentarios || '',
+          createdAt: r.createdAt || r.created_at,
+          deletedAt: r.deletedAt || r.deleted_at || new Date().toISOString()
+        }));
+        dbCache.trash = cleaned;
+        try { fs.writeFileSync(TRASH_FILE, JSON.stringify(cleaned, null, 2), 'utf-8'); } catch(e) {}
+        return cleaned;
+      }
+    }
+  } catch (err) {
+    console.warn('Supabase trash inaccesible (usando local):', err.message);
+  }
+  return readTrashLocal();
+}
+
+async function addLogEntry(tipo, titulo, detalle, reservaId = null) {
+  if (isPaco({ titulo, detalle, reservaId })) return null;
+  const entry = {
+    id: 'log-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6),
+    tipo,
+    titulo,
+    detalle,
+    timestamp: new Date().toISOString(),
+    reservaId
+  };
+
+  // Guardar en Supabase
+  try {
+    await supabaseFetch('/audit_logs', {
+      method: 'POST',
+      headers: { 'Prefer': 'return=representation' },
+      body: JSON.stringify(entry)
+    });
+  } catch(e) {}
+
+  // Guardar en local
+  const logs = readLogsLocal();
+  logs.unshift(entry);
+  if (logs.length > 250) logs.pop();
+  dbCache.logs = logs;
+  try { fs.writeFileSync(LOGS_FILE, JSON.stringify(logs, null, 2), 'utf-8'); } catch(e) {}
+  return entry;
+}
 
 // ========================================================
 // RUTAS DE API RESERVAS
 // ========================================================
 app.get('/api/reservas', async (req, res) => {
-  await syncFromCloud();
-  const reservas = readReservas();
+  const reservas = await fetchReservasFromSupabase();
   res.json(reservas);
 });
 
 app.post('/api/reservas', async (req, res) => {
-  await syncFromCloud();
   const { nombre, checkIn, checkOut, habitaciones, comentarios } = req.body;
 
   if (!nombre || !checkIn || !checkOut || !habitaciones) {
     return res.status(400).json({ error: 'Faltan campos obligatorios' });
+  }
+
+  // Rechazar intentos de inyección de Tío Paco
+  if (isPaco({ nombre, comentarios })) {
+    return res.status(400).json({ error: 'Nombre de reserva inválido' });
   }
 
   const numHab = parseInt(habitaciones, 10);
@@ -406,7 +439,7 @@ app.post('/api/reservas', async (req, res) => {
     return res.status(400).json({ error: 'La fecha de salida debe ser posterior a la fecha de entrada' });
   }
 
-  const reservas = readReservas();
+  const reservas = await fetchReservasFromSupabase();
   const nuevaEntrada = new Date(checkIn);
   const nuevaSalida = new Date(checkOut);
 
@@ -421,7 +454,7 @@ app.post('/api/reservas', async (req, res) => {
       const rIn = new Date(r.checkIn);
       const rOut = new Date(r.checkOut);
       if (cur >= rIn && cur < rOut) {
-        habOcupadas += r.habitaciones;
+        habOcupadas += (parseInt(r.habitaciones, 10) || 1);
       }
     }
 
@@ -453,9 +486,25 @@ app.post('/api/reservas', async (req, res) => {
     createdAt: new Date().toISOString()
   };
 
+  // Guardar en Supabase
+  try {
+    const sRes = await supabaseFetch('/reservas', {
+      method: 'POST',
+      headers: { 'Prefer': 'return=representation' },
+      body: JSON.stringify(nueva)
+    });
+    if (!sRes.ok) {
+      console.warn('Supabase POST /reservas:', sRes.status, await sRes.text());
+    }
+  } catch (err) {
+    console.warn('Error Supabase al crear reserva:', err.message);
+  }
+
+  // Guardar en local/caché
   reservas.push(nueva);
   reservas.sort((a, b) => new Date(a.checkIn) - new Date(b.checkIn));
-  await writeReservas(reservas);
+  dbCache.reservas = reservas;
+  try { fs.writeFileSync(DATA_FILE, JSON.stringify(reservas, null, 2), 'utf-8'); } catch(e) {}
 
   await addLogEntry('CREACION', `Nueva reserva: ${nueva.nombre}`, `${nueva.checkIn} al ${nueva.checkOut} (${nueva.habitaciones} hab.)`, nueva.id);
 
@@ -463,9 +512,8 @@ app.post('/api/reservas', async (req, res) => {
 });
 
 app.delete('/api/reservas/:id', async (req, res) => {
-  await syncFromCloud();
   const { id } = req.params;
-  const reservas = readReservas();
+  const reservas = await fetchReservasFromSupabase();
   const index = reservas.findIndex((r) => r.id === id);
 
   if (index === -1) {
@@ -473,16 +521,38 @@ app.delete('/api/reservas/:id', async (req, res) => {
   }
 
   const eliminada = reservas.splice(index, 1)[0];
-  await writeReservas(reservas);
+  dbCache.reservas = reservas;
+  try { fs.writeFileSync(DATA_FILE, JSON.stringify(reservas, null, 2), 'utf-8'); } catch(e) {}
 
-  // Mover a la papelera
-  const trash = readTrash();
+  // Eliminar en Supabase
+  try {
+    await supabaseFetch(`/reservas?id=eq.${encodeURIComponent(id)}`, { method: 'DELETE' });
+  } catch(e) {}
+
+  // Mover a la papelera (Supabase y local)
   const itemTrash = {
-    ...eliminada,
+    id: eliminada.id,
+    nombre: eliminada.nombre,
+    checkIn: eliminada.checkIn,
+    checkOut: eliminada.checkOut,
+    habitaciones: eliminada.habitaciones,
+    comentarios: eliminada.comentarios || '',
+    createdAt: eliminada.createdAt || new Date().toISOString(),
     deletedAt: new Date().toISOString()
   };
+
+  try {
+    await supabaseFetch('/trash_reservas', {
+      method: 'POST',
+      headers: { 'Prefer': 'return=representation' },
+      body: JSON.stringify(itemTrash)
+    });
+  } catch(e) {}
+
+  const trash = readTrashLocal();
   trash.unshift(itemTrash);
-  await writeTrash(trash);
+  dbCache.trash = trash;
+  try { fs.writeFileSync(TRASH_FILE, JSON.stringify(trash, null, 2), 'utf-8'); } catch(e) {}
 
   // Log de auditoría
   await addLogEntry('ELIMINACION', `Reserva cancelada: ${eliminada.nombre}`, `${eliminada.checkIn} al ${eliminada.checkOut} (${eliminada.habitaciones} hab.)`, eliminada.id);
@@ -494,8 +564,7 @@ app.delete('/api/reservas/:id', async (req, res) => {
 // RUTAS DE API LOGS DE AUDITORÍA
 // ========================================================
 app.get('/api/logs', async (req, res) => {
-  await syncFromCloud();
-  const logs = readLogs();
+  const logs = await fetchLogsFromSupabase();
   res.json(logs);
 });
 
@@ -505,11 +574,15 @@ app.post('/api/logs', async (req, res) => {
     return res.status(400).json({ error: 'Faltan campos para registrar el log' });
   }
   const entry = await addLogEntry(tipo, titulo, detalle || '', reservaId || null);
-  res.status(201).json(entry);
+  res.status(201).json(entry || {});
 });
 
 app.delete('/api/logs', async (req, res) => {
-  await writeLogs([]);
+  dbCache.logs = [];
+  try { fs.writeFileSync(LOGS_FILE, JSON.stringify([], null, 2), 'utf-8'); } catch(e) {}
+  try {
+    await supabaseFetch('/audit_logs?id=neq.placeholder', { method: 'DELETE' });
+  } catch(e) {}
   res.json({ success: true });
 });
 
@@ -517,15 +590,13 @@ app.delete('/api/logs', async (req, res) => {
 // RUTAS DE API PAPELERA Y RESTAURACIÓN
 // ========================================================
 app.get('/api/trash', async (req, res) => {
-  await syncFromCloud();
-  const trash = readTrash();
+  const trash = await fetchTrashFromSupabase();
   res.json(trash);
 });
 
 app.post('/api/trash/restore/:id', async (req, res) => {
-  await syncFromCloud();
   const { id } = req.params;
-  const trash = readTrash();
+  const trash = await fetchTrashFromSupabase();
   const itemIndex = trash.findIndex(r => r.id === id);
 
   if (itemIndex === -1) {
@@ -533,7 +604,7 @@ app.post('/api/trash/restore/:id', async (req, res) => {
   }
 
   const item = trash[itemIndex];
-  const reservas = readReservas();
+  const reservas = await fetchReservasFromSupabase();
 
   // Validar disponibilidad
   const entrada = new Date(item.checkIn);
@@ -548,7 +619,7 @@ app.post('/api/trash/restore/:id', async (req, res) => {
       const rIn = new Date(r.checkIn);
       const rOut = new Date(r.checkOut);
       if (cur >= rIn && cur < rOut) {
-        ocupadas += r.habitaciones;
+        ocupadas += (parseInt(r.habitaciones, 10) || 1);
       }
     }
     if (ocupadas + item.habitaciones > 3) {
@@ -564,18 +635,37 @@ app.post('/api/trash/restore/:id', async (req, res) => {
     });
   }
 
-  // Quitar de papelera y agregar a reservas
+  // Quitar de papelera en Supabase y local
   trash.splice(itemIndex, 1);
-  await writeTrash(trash);
+  dbCache.trash = trash;
+  try { fs.writeFileSync(TRASH_FILE, JSON.stringify(trash, null, 2), 'utf-8'); } catch(e) {}
+  try {
+    await supabaseFetch(`/trash_reservas?id=eq.${encodeURIComponent(id)}`, { method: 'DELETE' });
+  } catch(e) {}
 
   const restaurada = {
-    ...item,
-    restoredAt: new Date().toISOString()
+    id: item.id,
+    nombre: item.nombre,
+    checkIn: item.checkIn,
+    checkOut: item.checkOut,
+    habitaciones: item.habitaciones,
+    comentarios: item.comentarios || '',
+    createdAt: item.createdAt || new Date().toISOString()
   };
-  delete restaurada.deletedAt;
+
+  // Guardar en Supabase reservas
+  try {
+    await supabaseFetch('/reservas', {
+      method: 'POST',
+      headers: { 'Prefer': 'return=representation' },
+      body: JSON.stringify(restaurada)
+    });
+  } catch(e) {}
+
   reservas.push(restaurada);
   reservas.sort((a, b) => new Date(a.checkIn) - new Date(b.checkIn));
-  await writeReservas(reservas);
+  dbCache.reservas = reservas;
+  try { fs.writeFileSync(DATA_FILE, JSON.stringify(reservas, null, 2), 'utf-8'); } catch(e) {}
 
   await addLogEntry('RESTAURACION', `Reserva restaurada: ${restaurada.nombre}`, `${restaurada.checkIn} al ${restaurada.checkOut} (${restaurada.habitaciones} hab.)`, restaurada.id);
 
@@ -583,11 +673,13 @@ app.post('/api/trash/restore/:id', async (req, res) => {
 });
 
 app.delete('/api/trash/:id', async (req, res) => {
-  await syncFromCloud();
   const { id } = req.params;
-  let trash = readTrash();
-  trash = trash.filter(r => r.id !== id);
-  await writeTrash(trash);
+  let trash = readTrashLocal().filter(r => r.id !== id);
+  dbCache.trash = trash;
+  try { fs.writeFileSync(TRASH_FILE, JSON.stringify(trash, null, 2), 'utf-8'); } catch(e) {}
+  try {
+    await supabaseFetch(`/trash_reservas?id=eq.${encodeURIComponent(id)}`, { method: 'DELETE' });
+  } catch(e) {}
   res.json({ success: true });
 });
 
@@ -595,8 +687,7 @@ app.delete('/api/trash/:id', async (req, res) => {
 // RUTAS DE API INFORMACIÓN DE LA CASA (NORMAS, HABITACIONES, CONSEJOS)
 // ========================================================
 app.get('/api/casa-info', async (req, res) => {
-  await syncFromCloud();
-  const info = readCasaInfo();
+  const info = await fetchCasaInfoFromSupabase();
   res.json(info);
 });
 
@@ -607,7 +698,22 @@ app.post('/api/casa-info', async (req, res) => {
     normas: typeof normas === 'string' ? normas : '',
     consejos: typeof consejos === 'string' ? consejos : ''
   };
-  await writeCasaInfo(info);
+
+  dbCache.casaInfo = info;
+  try { fs.writeFileSync(INFO_FILE, JSON.stringify(info, null, 2), 'utf-8'); } catch(e) {}
+
+  try {
+    await supabaseFetch('/casa_info', {
+      method: 'POST',
+      headers: { 'Prefer': 'resolution=merge-duplicates,return=representation' },
+      body: JSON.stringify({
+        id: 'main',
+        ...info,
+        updatedAt: new Date().toISOString()
+      })
+    });
+  } catch(e) {}
+
   res.json({ success: true, info });
 });
 
@@ -627,7 +733,8 @@ function getLocalIPs() {
 
 const PORT = process.env.PORT || 3000;
 
-if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
+if (require.main === module && !process.env.VERCEL) {
+  fetchReservasFromSupabase().catch(() => {});
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`\n=================================================`);
     console.log(`🏠 Servidor Casa Chipiona activo en el puerto ${PORT}`);
@@ -637,7 +744,7 @@ if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
       console.log(`📱 Acceso desde móviles en la misma red Wi-Fi:`);
       ips.forEach(ip => console.log(`   👉 http://${ip}:${PORT}`));
     }
-    console.log(`☁️ Base de datos en la nube (Cloud Gist): Conectada`);
+    console.log(`☁️ Base de datos en la nube: Supabase (${SUPABASE_URL})`);
     console.log(`=================================================\n`);
   });
 }

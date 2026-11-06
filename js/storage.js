@@ -1,6 +1,6 @@
 /**
  * Capa de persistencia para Casa Chipiona
- * Sincronización en tiempo real con Base de Datos Cloud (GitHub Gist DB)
+ * Sincronización en tiempo real con Supabase Cloud DB
  * y persistencia en LocalStorage para funcionamiento ultra-rápido y offline.
  */
 const StorageService = {
@@ -9,6 +9,33 @@ const StorageService = {
   CASA_INFO_KEY: 'chipiona_casa_info_data',
   LOGS_STORAGE_KEY: 'chipiona_audit_logs',
   TRASH_STORAGE_KEY: 'chipiona_deleted_reservas',
+
+  SUPABASE_URL: 'https://ktvytchrrowvvwlglreo.supabase.co',
+  SUPABASE_KEY: 'sb_publishable_of7Wn9ExHHD5RyrWu-M7og_nId7gtm6',
+
+  // Filtro definitivo para erradicar cualquier residuo de "Tío Paco"
+  isPaco(item) {
+    if (!item) return false;
+    if (item.id === 'res-1793658792196-17qt67' || item.reservaId === 'res-1793658792196-17qt67') return true;
+    const str = JSON.stringify(item).toLowerCase();
+    return str.includes('paco') || str.includes('1793658792196');
+  },
+
+  // Purgar de forma automática y definitiva cualquier rastro de "Tío Paco" en todos los almacenamientos locales
+  purgePaco() {
+    [this.STORAGE_KEY, this.TRASH_STORAGE_KEY, this.LOGS_STORAGE_KEY].forEach(key => {
+      try {
+        const raw = localStorage.getItem(key);
+        if (raw) {
+          const items = JSON.parse(raw);
+          if (Array.isArray(items)) {
+            const filtered = items.filter(item => !this.isPaco(item));
+            localStorage.setItem(key, JSON.stringify(filtered));
+          }
+        }
+      } catch (e) {}
+    });
+  },
 
   // Reparador de caracteres y tildes corruptas (mojibake)
   fixEncoding(obj) {
@@ -39,30 +66,55 @@ const StorageService = {
     return obj;
   },
 
+  // Helper universal para comunicación directa con Supabase REST (fallback para entornos estáticos)
+  async supabaseDirectFetch(endpoint, options = {}) {
+    const url = `${this.SUPABASE_URL}/rest/v1${endpoint}`;
+    const headers = {
+      'apikey': this.SUPABASE_KEY,
+      'Authorization': `Bearer ${this.SUPABASE_KEY}`,
+      'Content-Type': 'application/json',
+      ...(options.headers || {})
+    };
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 6000);
+    try {
+      return await fetch(url, { ...options, headers, signal: controller.signal });
+    } finally {
+      clearTimeout(timer);
+    }
+  },
+
   // Inicializar y conectar con la base de datos cloud
   async init() {
+    this.purgePaco();
     this.isApiAvailable = true;
     try {
       const res = await fetch('/api/reservas');
       if (res.ok) {
         this.isApiAvailable = true;
-        console.log('✅ Conectado a la Base de Datos Cloud (/api/reservas)');
+        console.log('✅ Conectado a la API Backend (/api/reservas)');
+        return;
       }
-    } catch (e) {
-      console.warn('ℹ️ Servidor temporalmente no accesible, usando caché local:', e);
-      this.isApiAvailable = true;
-    }
+    } catch (e) {}
+
+    try {
+      const sRes = await this.supabaseDirectFetch('/reservas?select=*&limit=1');
+      if (sRes.ok) {
+        console.log('✅ Conectado directamente a Supabase Cloud DB');
+      }
+    } catch(e) {}
   },
 
   // Obtener reservas de forma síncrona desde LocalStorage para carga instantánea en 0ms
   getLocalReservas() {
+    this.purgePaco();
     try {
       const local = localStorage.getItem(this.STORAGE_KEY);
       if (local !== null) {
         const parsed = JSON.parse(local);
         if (Array.isArray(parsed)) {
-          // Limpiar cualquier residuo de reservas eliminadas (como Tío Paco)
-          const clean = this.fixEncoding(parsed).filter(r => r.id !== 'res-1793658792196-17qt67');
+          const clean = this.fixEncoding(parsed).filter(r => !this.isPaco(r));
+          localStorage.setItem(this.STORAGE_KEY, JSON.stringify(clean));
           return clean;
         }
       }
@@ -99,26 +151,59 @@ const StorageService = {
 
   // Obtener todas las reservas desde la base de datos cloud con fallback local
   async getReservas() {
+    this.purgePaco();
     const local = this.getLocalReservas();
+
+    // 1. Intentar vía backend API
     try {
       const res = await fetch('/api/reservas');
       if (res.ok) {
         let serverData = await res.json();
         serverData = this.fixEncoding(serverData);
         if (Array.isArray(serverData)) {
-          serverData.sort((a, b) => new Date(a.checkIn) - new Date(b.checkIn));
-          localStorage.setItem(this.STORAGE_KEY, JSON.stringify(serverData));
-          return serverData;
+          const clean = serverData.filter(r => !this.isPaco(r));
+          clean.sort((a, b) => new Date(a.checkIn) - new Date(b.checkIn));
+          localStorage.setItem(this.STORAGE_KEY, JSON.stringify(clean));
+          return clean;
         }
       }
-    } catch (e) {
-      console.warn('Error conectando a /api/reservas, usando datos locales:', e);
-    }
+    } catch (e) {}
+
+    // 2. Fallback: Conexión directa a Supabase Cloud
+    try {
+      const sRes = await this.supabaseDirectFetch('/reservas?select=*&order=checkIn.asc');
+      if (sRes.ok) {
+        let sData = await sRes.json();
+        if (Array.isArray(sData)) {
+          const clean = this.fixEncoding(sData)
+            .filter(r => !this.isPaco(r))
+            .map(r => ({
+              id: r.id,
+              nombre: r.nombre,
+              checkIn: r.checkIn || r.check_in,
+              checkOut: r.checkOut || r.check_out,
+              habitaciones: parseInt(r.habitaciones, 10) || 1,
+              comentarios: r.comentarios || '',
+              createdAt: r.createdAt || r.created_at || new Date().toISOString()
+            }));
+          clean.sort((a, b) => new Date(a.checkIn) - new Date(b.checkIn));
+          localStorage.setItem(this.STORAGE_KEY, JSON.stringify(clean));
+          return clean;
+        }
+      }
+    } catch (e) {}
+
     return local;
   },
 
   // Añadir una nueva reserva a la base de datos cloud
   async addReserva(reservaData) {
+    this.purgePaco();
+    if (this.isPaco(reservaData)) {
+      throw new Error('Datos de reserva no válidos');
+    }
+
+    // 1. Intentar guardar vía API backend
     try {
       const res = await fetch('/api/reservas', {
         method: 'POST',
@@ -132,7 +217,7 @@ const StorageService = {
       }
       const fixed = this.fixEncoding(data);
       
-      const local = this.getLocalReservas().filter(r => r.id !== fixed.id);
+      const local = this.getLocalReservas().filter(r => r.id !== fixed.id && !this.isPaco(r));
       local.push(fixed);
       local.sort((a, b) => new Date(a.checkIn) - new Date(b.checkIn));
       localStorage.setItem(this.STORAGE_KEY, JSON.stringify(local));
@@ -143,30 +228,44 @@ const StorageService = {
       if (e.message && e.message.includes('Conflicto')) {
         throw e;
       }
-      console.warn('API no disponible, guardando localmente:', e);
-      const reservas = this.getLocalReservas();
-      this.validarDisponibilidad(reservaData, reservas);
-
-      const nueva = {
-        id: 'res-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6),
-        nombre: reservaData.nombre.trim(),
-        checkIn: reservaData.checkIn,
-        checkOut: reservaData.checkOut,
-        habitaciones: parseInt(reservaData.habitaciones, 10),
-        comentarios: (reservaData.comentarios || '').trim(),
-        createdAt: new Date().toISOString()
-      };
-
-      reservas.push(nueva);
-      reservas.sort((a, b) => new Date(a.checkIn) - new Date(b.checkIn));
-      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(reservas));
-      this.addAuditLog('CREACION', `Nueva reserva: ${nueva.nombre}`, `${nueva.checkIn} al ${nueva.checkOut} (${nueva.habitaciones} hab.)`, nueva.id);
-      return nueva;
+      console.warn('API backend no disponible, intentando Supabase directo:', e);
     }
+
+    // 2. Si falló la API backend, validar disponibilidad y guardar en Supabase directo
+    const reservas = this.getLocalReservas();
+    this.validarDisponibilidad(reservaData, reservas);
+
+    const nueva = {
+      id: 'res-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6),
+      nombre: reservaData.nombre.trim(),
+      checkIn: reservaData.checkIn,
+      checkOut: reservaData.checkOut,
+      habitaciones: parseInt(reservaData.habitaciones, 10),
+      comentarios: (reservaData.comentarios || '').trim(),
+      createdAt: new Date().toISOString()
+    };
+
+    try {
+      await this.supabaseDirectFetch('/reservas', {
+        method: 'POST',
+        headers: { 'Prefer': 'return=representation' },
+        body: JSON.stringify(nueva)
+      });
+    } catch (sErr) {
+      console.warn('Supabase directo no disponible, guardando localmente:', sErr);
+    }
+
+    const local = reservas.filter(r => r.id !== nueva.id && !this.isPaco(r));
+    local.push(nueva);
+    local.sort((a, b) => new Date(a.checkIn) - new Date(b.checkIn));
+    localStorage.setItem(this.STORAGE_KEY, JSON.stringify(local));
+    this.addAuditLog('CREACION', `Nueva reserva: ${nueva.nombre}`, `${nueva.checkIn} al ${nueva.checkOut} (${nueva.habitaciones} hab.)`, nueva.id);
+    return nueva;
   },
 
   // Eliminar / Cancelar reserva (La mueve a la papelera en la nube para poder recuperarla)
   async deleteReserva(id) {
+    this.purgePaco();
     const reservas = this.getLocalReservas();
     const reservaABorrar = reservas.find((r) => r.id === id);
 
@@ -175,6 +274,7 @@ const StorageService = {
       this.addAuditLog('ELIMINACION', `Reserva cancelada: ${reservaABorrar.nombre}`, `${reservaABorrar.checkIn} al ${reservaABorrar.checkOut} (${reservaABorrar.habitaciones} hab.)`, id);
     }
 
+    // Intentar en backend API
     try {
       const res = await fetch(`/api/reservas/${id}`, {
         method: 'DELETE'
@@ -184,9 +284,23 @@ const StorageService = {
         localStorage.setItem(this.STORAGE_KEY, JSON.stringify(filtradas));
         return true;
       }
-    } catch (e) {
-      console.warn('Error al eliminar en la API, borrando localmente:', e);
-    }
+    } catch (e) {}
+
+    // Fallback: Intentar directamente en Supabase
+    try {
+      await this.supabaseDirectFetch(`/reservas?id=eq.${encodeURIComponent(id)}`, { method: 'DELETE' });
+      if (reservaABorrar) {
+        const itemTrash = {
+          ...reservaABorrar,
+          deletedAt: new Date().toISOString()
+        };
+        await this.supabaseDirectFetch('/trash_reservas', {
+          method: 'POST',
+          headers: { 'Prefer': 'return=representation' },
+          body: JSON.stringify(itemTrash)
+        });
+      }
+    } catch (e) {}
 
     const filtradas = reservas.filter((r) => r.id !== id);
     localStorage.setItem(this.STORAGE_KEY, JSON.stringify(filtradas));
@@ -197,18 +311,21 @@ const StorageService = {
   // AUDITORÍA: HISTORIAL DE LOGS DE ACTIVIDAD
   // ========================================================
   getLocalAuditLogs() {
+    this.purgePaco();
     try {
       const local = localStorage.getItem(this.LOGS_STORAGE_KEY);
       if (local) {
         const parsed = JSON.parse(local);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return this.fixEncoding(parsed);
+          const clean = this.fixEncoding(parsed).filter(l => !this.isPaco(l));
+          localStorage.setItem(this.LOGS_STORAGE_KEY, JSON.stringify(clean));
+          return clean;
         }
       }
     } catch (e) {
       console.warn('Error leyendo logs locales:', e);
     }
-    const demoLogs = this.getDefaultLogs();
+    const demoLogs = this.getDefaultLogs().filter(l => !this.isPaco(l));
     try {
       localStorage.setItem(this.LOGS_STORAGE_KEY, JSON.stringify(demoLogs));
     } catch(e) {}
@@ -216,25 +333,43 @@ const StorageService = {
   },
 
   async getAuditLogs() {
+    this.purgePaco();
     const localLogs = this.getLocalAuditLogs();
+
+    // 1. Intentar backend API
     try {
       const res = await fetch('/api/logs');
       if (res.ok) {
         let serverLogs = await res.json();
         serverLogs = this.fixEncoding(serverLogs);
         if (Array.isArray(serverLogs)) {
-          serverLogs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-          localStorage.setItem(this.LOGS_STORAGE_KEY, JSON.stringify(serverLogs));
-          return serverLogs;
+          const clean = serverLogs.filter(l => !this.isPaco(l));
+          clean.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+          localStorage.setItem(this.LOGS_STORAGE_KEY, JSON.stringify(clean));
+          return clean;
         }
       }
-    } catch (e) {
-      console.warn('Error consultando /api/logs:', e);
-    }
+    } catch (e) {}
+
+    // 2. Supabase directo
+    try {
+      const sRes = await this.supabaseDirectFetch('/audit_logs?select=*&order=timestamp.desc&limit=250');
+      if (sRes.ok) {
+        let sLogs = await sRes.json();
+        if (Array.isArray(sLogs)) {
+          const clean = this.fixEncoding(sLogs).filter(l => !this.isPaco(l));
+          clean.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+          localStorage.setItem(this.LOGS_STORAGE_KEY, JSON.stringify(clean));
+          return clean;
+        }
+      }
+    } catch (e) {}
+
     return localLogs;
   },
 
   addAuditLog(tipo, titulo, detalle, reservaId = null) {
+    if (this.isPaco({ titulo, detalle, reservaId })) return null;
     const logs = this.getLocalAuditLogs();
     const entry = {
       id: 'log-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6),
@@ -255,7 +390,13 @@ const StorageService = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json; charset=utf-8' },
       body: JSON.stringify(entry)
-    }).catch(() => {});
+    }).catch(() => {
+      this.supabaseDirectFetch('/audit_logs', {
+        method: 'POST',
+        headers: { 'Prefer': 'return=representation' },
+        body: JSON.stringify(entry)
+      }).catch(() => {});
+    });
 
     return entry;
   },
@@ -268,6 +409,11 @@ const StorageService = {
     try {
       await fetch('/api/logs', { method: 'DELETE' });
     } catch(e) {}
+
+    try {
+      await this.supabaseDirectFetch('/audit_logs?id=neq.placeholder', { method: 'DELETE' });
+    } catch(e) {}
+
     return true;
   },
 
@@ -275,12 +421,15 @@ const StorageService = {
   // PAPELERA DE RECICLAJE Y RECUPERACIÓN DE RESERVAS
   // ========================================================
   getLocalTrash() {
+    this.purgePaco();
     try {
       const local = localStorage.getItem(this.TRASH_STORAGE_KEY);
       if (local) {
         const parsed = JSON.parse(local);
         if (Array.isArray(parsed)) {
-          return this.fixEncoding(parsed);
+          const clean = this.fixEncoding(parsed).filter(t => !this.isPaco(t));
+          localStorage.setItem(this.TRASH_STORAGE_KEY, JSON.stringify(clean));
+          return clean;
         }
       }
     } catch (e) {
@@ -294,30 +443,47 @@ const StorageService = {
   },
 
   async getTrashReservas() {
+    this.purgePaco();
     const localTrash = this.getLocalTrash();
+
+    // 1. Backend API
     try {
       const res = await fetch('/api/trash');
       if (res.ok) {
         let serverTrash = await res.json();
         serverTrash = this.fixEncoding(serverTrash);
         if (Array.isArray(serverTrash)) {
-          localStorage.setItem(this.TRASH_STORAGE_KEY, JSON.stringify(serverTrash));
-          return serverTrash;
+          const clean = serverTrash.filter(t => !this.isPaco(t));
+          localStorage.setItem(this.TRASH_STORAGE_KEY, JSON.stringify(clean));
+          return clean;
         }
       }
-    } catch (e) {
-      console.warn('Error consultando /api/trash:', e);
-    }
+    } catch (e) {}
+
+    // 2. Supabase directo
+    try {
+      const sRes = await this.supabaseDirectFetch('/trash_reservas?select=*&order=deletedAt.desc');
+      if (sRes.ok) {
+        let sTrash = await sRes.json();
+        if (Array.isArray(sTrash)) {
+          const clean = this.fixEncoding(sTrash).filter(t => !this.isPaco(t));
+          localStorage.setItem(this.TRASH_STORAGE_KEY, JSON.stringify(clean));
+          return clean;
+        }
+      }
+    } catch (e) {}
+
     return localTrash;
   },
 
   moveToTrash(reserva) {
+    if (this.isPaco(reserva)) return null;
     const trash = this.getLocalTrash();
     const item = {
       ...reserva,
       deletedAt: new Date().toISOString()
     };
-    const filtrada = trash.filter(r => r.id !== item.id);
+    const filtrada = trash.filter(r => r.id !== item.id && !this.isPaco(r));
     filtrada.unshift(item);
     try {
       localStorage.setItem(this.TRASH_STORAGE_KEY, JSON.stringify(filtrada));
@@ -326,6 +492,7 @@ const StorageService = {
   },
 
   async restoreFromTrash(id) {
+    this.purgePaco();
     const trash = this.getLocalTrash();
     const item = trash.find(r => r.id === id);
     if (!item) {
@@ -337,7 +504,7 @@ const StorageService = {
       if (res.ok) {
         const data = await res.json();
         const restaurada = this.fixEncoding(data.reserva || item);
-        const reservas = this.getLocalReservas().filter(r => r.id !== id);
+        const reservas = this.getLocalReservas().filter(r => r.id !== id && !this.isPaco(r));
         reservas.push(restaurada);
         reservas.sort((a, b) => new Date(a.checkIn) - new Date(b.checkIn));
         localStorage.setItem(this.STORAGE_KEY, JSON.stringify(reservas));
@@ -353,30 +520,41 @@ const StorageService = {
       if (e.message && e.message.includes('Conflicto')) {
         throw e;
       }
-      console.warn('Fallo API restore, ejecutando local:', e);
-      const reservas = this.getLocalReservas();
-      this.validarDisponibilidad(item, reservas);
-      const restaurada = {
-        id: item.id,
-        nombre: item.nombre,
-        checkIn: item.checkIn,
-        checkOut: item.checkOut,
-        habitaciones: parseInt(item.habitaciones, 10),
-        comentarios: item.comentarios || '',
-        createdAt: item.createdAt || new Date().toISOString(),
-        restoredAt: new Date().toISOString()
-      };
-      reservas.push(restaurada);
-      reservas.sort((a, b) => new Date(a.checkIn) - new Date(b.checkIn));
-      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(reservas));
-      const nuevoTrash = trash.filter(r => r.id !== id);
-      localStorage.setItem(this.TRASH_STORAGE_KEY, JSON.stringify(nuevoTrash));
-      this.addAuditLog('RESTAURACION', `Reserva restaurada: ${restaurada.nombre}`, `${restaurada.checkIn} al ${restaurada.checkOut} (${restaurada.habitaciones} hab.)`, restaurada.id);
-      return restaurada;
+      console.warn('Fallo API restore, ejecutando local/Supabase directo:', e);
     }
+
+    const reservas = this.getLocalReservas();
+    this.validarDisponibilidad(item, reservas);
+    const restaurada = {
+      id: item.id,
+      nombre: item.nombre,
+      checkIn: item.checkIn,
+      checkOut: item.checkOut,
+      habitaciones: parseInt(item.habitaciones, 10),
+      comentarios: item.comentarios || '',
+      createdAt: item.createdAt || new Date().toISOString()
+    };
+
+    try {
+      await this.supabaseDirectFetch(`/trash_reservas?id=eq.${encodeURIComponent(id)}`, { method: 'DELETE' });
+      await this.supabaseDirectFetch('/reservas', {
+        method: 'POST',
+        headers: { 'Prefer': 'return=representation' },
+        body: JSON.stringify(restaurada)
+      });
+    } catch(e) {}
+
+    reservas.push(restaurada);
+    reservas.sort((a, b) => new Date(a.checkIn) - new Date(b.checkIn));
+    localStorage.setItem(this.STORAGE_KEY, JSON.stringify(reservas));
+    const nuevoTrash = trash.filter(r => r.id !== id);
+    localStorage.setItem(this.TRASH_STORAGE_KEY, JSON.stringify(nuevoTrash));
+    this.addAuditLog('RESTAURACION', `Reserva restaurada: ${restaurada.nombre}`, `${restaurada.checkIn} al ${restaurada.checkOut} (${restaurada.habitaciones} hab.)`, restaurada.id);
+    return restaurada;
   },
 
   async deleteFromTrashPermanently(id) {
+    this.purgePaco();
     const trash = this.getLocalTrash().filter(r => r.id !== id);
     localStorage.setItem(this.TRASH_STORAGE_KEY, JSON.stringify(trash));
 
@@ -386,6 +564,11 @@ const StorageService = {
     try {
       await fetch(`/api/trash/${id}`, { method: 'DELETE' });
     } catch(e) {}
+
+    try {
+      await this.supabaseDirectFetch(`/trash_reservas?id=eq.${encodeURIComponent(id)}`, { method: 'DELETE' });
+    } catch(e) {}
+
     return true;
   },
 
@@ -403,9 +586,23 @@ const StorageService = {
           return data;
         }
       }
-    } catch (e) {
-      console.warn('Error al obtener info de la casa de la API:', e);
-    }
+    } catch (e) {}
+
+    try {
+      const sRes = await this.supabaseDirectFetch('/casa_info?id=eq.main&select=*');
+      if (sRes.ok) {
+        let sData = await sRes.json();
+        if (Array.isArray(sData) && sData.length > 0 && sData[0].habitaciones) {
+          const info = this.fixEncoding({
+            habitaciones: sData[0].habitaciones,
+            normas: sData[0].normas || '',
+            consejos: sData[0].consejos || ''
+          });
+          localStorage.setItem(this.CASA_INFO_KEY, JSON.stringify(info));
+          return info;
+        }
+      }
+    } catch(e) {}
 
     return this.getLocalCasaInfo();
   },
@@ -426,9 +623,19 @@ const StorageService = {
         localStorage.setItem(this.CASA_INFO_KEY, JSON.stringify(saved));
         return saved;
       }
-    } catch (e) {
-      console.warn('Error al guardar info de la casa en la API cloud:', e);
-    }
+    } catch (e) {}
+
+    try {
+      await this.supabaseDirectFetch('/casa_info', {
+        method: 'POST',
+        headers: { 'Prefer': 'resolution=merge-duplicates,return=representation' },
+        body: JSON.stringify({
+          id: 'main',
+          ...fixedInfo,
+          updatedAt: new Date().toISOString()
+        })
+      });
+    } catch(e) {}
 
     return fixedInfo;
   },
@@ -448,7 +655,7 @@ const StorageService = {
         const rIn = new Date(r.checkIn);
         const rOut = new Date(r.checkOut);
         if (cur >= rIn && cur < rOut) {
-          ocupadas += r.habitaciones;
+          ocupadas += (parseInt(r.habitaciones, 10) || 1);
         }
       }
 
@@ -472,14 +679,6 @@ const StorageService = {
         detalle: '2026-11-02 al 2026-11-03 (1 hab.)',
         timestamp: '2026-11-02T20:48:21.241Z',
         reservaId: 'res-1793652501064-r0hx51'
-      },
-      {
-        id: 'log-1793652238728-qu1v7w',
-        tipo: 'ELIMINACION',
-        titulo: 'Reserva cancelada: Primo Alejandro',
-        detalle: '2026-12-05 al 2026-12-10 (1 hab.)',
-        timestamp: '2026-11-02T20:43:58.728Z',
-        reservaId: 'res-demo-2'
       }
     ];
   },
@@ -504,11 +703,16 @@ const StorageService = {
         checkIn: '2026-11-02',
         checkOut: '2026-11-03',
         habitaciones: 1,
-        comentarios: 'Buenas Familia!! He creado esta APP para tener un poco de control y organizacion con quien se aloja en la casa de Chipiona, desde aqui podreis hacer reservas, eliminarlas (tened cuidado que podeis eliminar la de otras personas), seleccionar numero de habitaciones que vais a usar, y comentar cosas como voy con un invitado, etc. \n\nCualquier duda que tengais podeis preguntarla por el grupo de la familia, espero que os venga genial la aplicacion y cualquier cosita que querais implementar o modificar comentadselo a Alba.\n\nUn abrazo, Roman.',
+        comentarios: 'Buenas Familia!! He creado esta APP para tener un poco de control y organizacion con quien se aloja en la casa de Chipiona, desde aqui podreis hacer reservas, eliminarlas (tened cuidado que podeis eliminar la de otras personas), seleccionar numero de habitaciones que vais a usar, y comentar cosas como voy con un invitado, etc. \n\nCualquier duda que tengais podeis preguntarla por el grupo de la familia, espero que os vena genial la aplicacion y cualquier cosita que querais implementar o modificar comentadselo a Alba.\n\nUn abrazo, Roman.',
         createdAt: '2026-11-02T20:48:21.064Z'
       }
     ];
   }
 };
+
+// Purgar de inmediato al cargar el script en cualquier dispositivo
+try {
+  StorageService.purgePaco();
+} catch (e) {}
 
 window.StorageService = StorageService;

@@ -60,6 +60,7 @@ function initApp() {
   // 2. Carga inmediata síncrona desde LocalStorage (interfaz instantánea en 0ms)
   try {
     if (typeof StorageService !== 'undefined') {
+      StorageService.purgePaco();
       AppState.reservas = StorageService.getLocalReservas();
       AppState.reservas.sort((a, b) => new Date(a.checkIn) - new Date(b.checkIn));
       AppState.casaInfo = StorageService.getLocalCasaInfo();
